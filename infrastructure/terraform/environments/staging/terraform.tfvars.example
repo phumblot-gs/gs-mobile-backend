@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars and adjust as needed. Most defaults are fine.
+
+# aws_region  = "eu-west-1"
+# environment = "staging"
+# project_name = "gs-mobile"
+
+# domain_name      = "api-staging.mobile.grand-shooting.com"
+# public_base_url  = "https://api-staging.mobile.grand-shooting.com"
+# mobile_deep_link_scheme = "gsmobile"
+
+# lambda_memory_size = 512
+# lambda_timeout     = 30
+# uploads_retention_days = 7

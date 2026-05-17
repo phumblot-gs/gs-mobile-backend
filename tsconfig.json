@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@gs-mobile-backend/core": ["./packages/core/src"],
+      "@gs-mobile-backend/sdk": ["./packages/sdk/src"]
+    }
+  },
+  "include": ["apps/**/src/**/*", "packages/**/src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
+}

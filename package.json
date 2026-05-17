@@ -1,0 +1,31 @@
+{
+  "name": "gs-mobile-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AWS backend for the Grand Shooting iOS mobile app (OAuth proxy + packshot processing)",
+  "scripts": {
+    "dev": "pnpm --filter @gs-mobile-backend/lambda-api dev",
+    "build": "pnpm -r --sequential build",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:unit": "vitest run",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "pnpm -r typecheck",
+    "invoke:local": "./scripts/invoke-local.sh",
+    "seed:secrets": "./scripts/seed-secrets.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "esbuild": "^0.27.0",
+    "eslint": "^8.54.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.3.3",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}

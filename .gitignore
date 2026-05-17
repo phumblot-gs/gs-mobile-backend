@@ -1,0 +1,43 @@
+node_modules
+.env*
+!env.*.example
+dist
+*.log
+.DS_Store
+coverage
+.vscode
+.idea
+*.swp
+*.swo
+.npmrc
+
+# Compiled TypeScript output in src directories
+apps/*/src/**/*.js
+apps/*/src/**/*.d.ts
+apps/*/src/**/*.js.map
+apps/*/src/**/*.d.ts.map
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts.map
+
+# Lambda build artifacts
+apps/lambda-api/dist
+apps/lambda-api/packages
+apps/lambda-api/*.zip
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+tfplan
+.terraform.lock.hcl
+terraform.tfvars
+!terraform.tfvars.example
+
+# Local config
+.claude/settings.local.json
+
+# Test artifacts
+test-*.json
+*.tsbuildinfo
