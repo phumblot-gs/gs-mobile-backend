@@ -85,6 +85,20 @@
       "Resource": "arn:aws:logs:eu-west-1:980539927939:*"
     },
     {
+      "Sid": "CloudWatchLogDelivery",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogDelivery",
+        "logs:GetLogDelivery",
+        "logs:UpdateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:DescribeResourcePolicies",
+        "logs:PutResourcePolicy"
+      ],
+      "Resource": "*"
+    },
+    {
       "Sid": "ACMForCustomDomain",
       "Effect": "Allow",
       "Action": [
