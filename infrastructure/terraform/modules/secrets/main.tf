@@ -48,13 +48,13 @@ resource "aws_secretsmanager_secret_version" "gs_oauth_client_secret" {
 
 resource "aws_secretsmanager_secret" "gs_oauth_base_url" {
   name                    = local.secret_names.gs_oauth_base_url
-  description             = "Grand Shooting OAuth base URL (e.g. https://api-19.grand-shooting.com)"
+  description             = "Grand Shooting OAuth base URL (e.g. https://api.grand-shooting.com)"
   recovery_window_in_days = var.recovery_window_in_days
 }
 
 resource "aws_secretsmanager_secret_version" "gs_oauth_base_url" {
   secret_id     = aws_secretsmanager_secret.gs_oauth_base_url.id
-  secret_string = "https://api-19.grand-shooting.com"
+  secret_string = "https://api.grand-shooting.com"
 
   lifecycle {
     ignore_changes = [secret_string]

@@ -118,7 +118,7 @@ The script prompts interactively for each secret value. Required values:
 
 - `gs-mobile/staging/gs-oauth-client-id` — from Grand Shooting plugin admin
 - `gs-mobile/staging/gs-oauth-client-secret` — from Grand Shooting plugin admin
-- `gs-mobile/staging/gs-oauth-base-url` — e.g. `https://api-19.grand-shooting.com`
+- `gs-mobile/staging/gs-oauth-base-url` — `https://api.grand-shooting.com` (host serving `/oauth/default/authorize` and `/oauth/default/token`)
 - `gs-mobile/staging/photoroom-api-key` — from Photoroom dashboard
 - `gs-mobile/staging/autoretouch-api-key` — from Autoretouch dashboard
 

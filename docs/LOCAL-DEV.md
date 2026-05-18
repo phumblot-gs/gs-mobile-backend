@@ -24,7 +24,7 @@ override env vars to your `.env`:
 ```
 GS_OAUTH_CLIENT_ID=<dev client id>
 GS_OAUTH_CLIENT_SECRET=<dev client secret>
-GS_OAUTH_BASE_URL=https://api-19.grand-shooting.com
+GS_OAUTH_BASE_URL=https://api.grand-shooting.com
 PHOTOROOM_API_KEY=<sandbox key>
 AUTORETOUCH_API_KEY=<sandbox key>
 ```

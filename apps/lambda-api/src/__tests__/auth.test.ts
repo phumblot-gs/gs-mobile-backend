@@ -61,7 +61,7 @@ const baseEnv = {
   SECRET_AUTORETOUCH_API_KEY: 'gs-mobile/dev/ar',
   GS_OAUTH_CLIENT_ID: 'test-client-id',
   GS_OAUTH_CLIENT_SECRET: 'test-client-secret',
-  GS_OAUTH_BASE_URL: 'https://api-19.grand-shooting.com'
+  GS_OAUTH_BASE_URL: 'https://api.grand-shooting.com'
 };
 
 beforeEach(() => {
@@ -83,7 +83,7 @@ describe('auth handlers', () => {
     const loc = res.headers.get('location');
     expect(loc).toBeTruthy();
     const u = new URL(loc!);
-    expect(u.origin).toBe('https://api-19.grand-shooting.com');
+    expect(u.origin).toBe('https://api.grand-shooting.com');
     expect(u.pathname).toBe('/oauth/default/authorize');
     expect(u.searchParams.get('client_id')).toBe('test-client-id');
     expect(u.searchParams.get('response_type')).toBe('code');
@@ -155,7 +155,7 @@ describe('auth handlers', () => {
     const json = (await ex.json()) as { access_token: string; refresh_token: string; api_base_url: string };
     expect(json.access_token).toBe('tok-access');
     expect(json.refresh_token).toBe('tok-refresh');
-    expect(json.api_base_url).toBe('https://api-19.grand-shooting.com');
+    expect(json.api_base_url).toBe('https://api.grand-shooting.com');
 
     // exchange is one-shot — a second call must fail
     const ex2 = await app.request('/auth/exchange', {
