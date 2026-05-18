@@ -7,6 +7,7 @@ import { authStart } from './handlers/auth-start.js';
 import { authCallback } from './handlers/auth-callback.js';
 import { authExchange } from './handlers/auth-exchange.js';
 import { authRefresh } from './handlers/auth-refresh.js';
+import { authDeactivate } from './handlers/auth-deactivate.js';
 import { uploadInit } from './handlers/upload-init.js';
 import { packshot } from './handlers/packshot.js';
 
@@ -47,6 +48,8 @@ app.get('/auth/start', authStart);
 app.get('/auth/callback', authCallback);
 app.post('/auth/exchange', authExchange);
 app.post('/auth/refresh', authRefresh);
+app.get('/auth/deactivate', authDeactivate);
+app.post('/auth/deactivate', authDeactivate);
 
 // =============================================================================
 // Uploads + packshot
