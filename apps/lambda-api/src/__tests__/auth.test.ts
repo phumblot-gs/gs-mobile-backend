@@ -9,6 +9,7 @@ vi.mock('../lib/dynamo.js', () => {
     refresh_token?: string;
     expires_in: number;
     api_base_url: string;
+    email?: string;
     expires_at: number;
     created_at: number;
   }>();
@@ -22,7 +23,7 @@ vi.mock('../lib/dynamo.js', () => {
       states.delete(state);
       return v;
     }),
-    putOAuthSession: vi.fn(async (rec: { session_id: string; access_token: string; refresh_token?: string; expires_in: number; api_base_url: string }) => {
+    putOAuthSession: vi.fn(async (rec: { session_id: string; access_token: string; refresh_token?: string; expires_in: number; api_base_url: string; email?: string }) => {
       const full = { ...rec, expires_at: Date.now() / 1000 + 60, created_at: Date.now() / 1000 };
       sessions.set(rec.session_id, full);
       return full;
@@ -125,20 +126,30 @@ describe('auth handlers', () => {
     const knownState = 'b'.repeat(64);
     await dynamo.putOAuthState(knownState);
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          access_token: 'tok-access',
-          refresh_token: 'tok-refresh',
-          token_type: 'bearer',
-          expires_in: 3600
-        }),
-        { status: 200, headers: { 'content-type': 'application/json' } }
-      )
-    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request | URL).toString();
+      if (url.includes('/oauth/default/token')) {
+        return new Response(
+          JSON.stringify({
+            access_token: 'tok-access',
+            refresh_token: 'tok-refresh',
+            token_type: 'bearer',
+            expires_in: 3600
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      if (url.includes('/oauth/default/userinfo')) {
+        return new Response(
+          JSON.stringify({ sub: 'user-123', email: 'staff@grand-shooting.com' }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      return new Response('not stubbed', { status: 500 });
+    });
 
     const res = await app.request(`/auth/callback?code=THECODE&state=${knownState}`);
-    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(res.status).toBe(302);
     const loc = res.headers.get('location') ?? '';
     expect(loc.startsWith('gsmobile://auth/done?session_id=')).toBe(true);
@@ -152,10 +163,11 @@ describe('auth handlers', () => {
       body: JSON.stringify({ session_id: sessionId })
     });
     expect(ex.status).toBe(200);
-    const json = (await ex.json()) as { access_token: string; refresh_token: string; api_base_url: string };
+    const json = (await ex.json()) as { access_token: string; refresh_token: string; api_base_url: string; email?: string };
     expect(json.access_token).toBe('tok-access');
     expect(json.refresh_token).toBe('tok-refresh');
     expect(json.api_base_url).toBe('https://api.grand-shooting.com');
+    expect(json.email).toBe('staff@grand-shooting.com');
 
     // exchange is one-shot — a second call must fail
     const ex2 = await app.request('/auth/exchange', {
@@ -166,17 +178,68 @@ describe('auth handlers', () => {
     expect(ex2.status).toBe(401);
   });
 
-  it('POST /auth/refresh proxies refresh_token to GS', async () => {
+  it('GET /auth/callback still succeeds when userinfo lookup fails', async () => {
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    const dynamo = await import('../lib/dynamo.js');
+    const { app } = await import('../index.js');
+
+    const knownState = 'c'.repeat(64);
+    await dynamo.putOAuthState(knownState);
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request | URL).toString();
+      if (url.includes('/oauth/default/token')) {
+        return new Response(
+          JSON.stringify({
+            access_token: 'tok-access-2',
+            refresh_token: 'tok-refresh-2',
+            token_type: 'bearer',
+            expires_in: 3600
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      // Simulate a userinfo endpoint that doesn't exist on this GS deployment.
+      return new Response('not found', { status: 404 });
+    });
+
+    const res = await app.request(`/auth/callback?code=THECODE&state=${knownState}`);
+    expect(res.status).toBe(302);
+    const sessionId = new URL(res.headers.get('location')!).searchParams.get('session_id')!;
+
+    const ex = await app.request('/auth/exchange', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId })
+    });
+    expect(ex.status).toBe(200);
+    const json = (await ex.json()) as { access_token: string; email?: string };
+    expect(json.access_token).toBe('tok-access-2');
+    expect(json.email).toBeUndefined();
+  });
+
+  it('POST /auth/refresh proxies refresh_token to GS and includes email', async () => {
     const { resetConfigCache } = await import('../lib/config.js');
     resetConfigCache();
     const { app } = await import('../index.js');
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 }),
-        { status: 200, headers: { 'content-type': 'application/json' } }
-      )
-    );
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request | URL).toString();
+      if (url.includes('/oauth/default/token')) {
+        return new Response(
+          JSON.stringify({ access_token: 'new-access', refresh_token: 'new-refresh', expires_in: 3600 }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      if (url.includes('/oauth/default/userinfo')) {
+        return new Response(
+          JSON.stringify({ sub: 'user-123', email: 'someone@example.com' }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      return new Response('not stubbed', { status: 500 });
+    });
 
     const res = await app.request('/auth/refresh', {
       method: 'POST',
@@ -184,7 +247,8 @@ describe('auth handlers', () => {
       body: JSON.stringify({ refresh_token: 'old-refresh' })
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { access_token: string };
+    const json = (await res.json()) as { access_token: string; email?: string };
     expect(json.access_token).toBe('new-access');
+    expect(json.email).toBe('someone@example.com');
   });
 });

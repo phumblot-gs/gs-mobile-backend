@@ -8,6 +8,7 @@ import {
 } from '@gs-mobile-backend/core';
 import { getConfig } from '../lib/config.js';
 import { getSecretOrEnv } from '../lib/secrets.js';
+import { fetchUserEmail, redactEmail } from '../lib/gs-userinfo.js';
 
 /**
  * POST /auth/refresh
@@ -52,11 +53,21 @@ export async function authRefresh(c: Context): Promise<Response> {
   }
 
   const tokens = OAuthTokenResponseZ.parse(await res.json());
+
+  // Best-effort userinfo lookup so the iOS app can re-hydrate `userEmail`
+  // on a cold launch where only the refresh token is in the Keychain.
+  // Failure must not break the refresh.
+  const email = await fetchUserEmail(tokens.access_token, baseUrl);
+  if (email) {
+    console.log('[auth-refresh] refreshed', { email: redactEmail(email) });
+  }
+
   return c.json(
     AuthRefreshResponseZ.parse({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
-      expires_in: tokens.expires_in
+      expires_in: tokens.expires_in,
+      email
     })
   );
 }

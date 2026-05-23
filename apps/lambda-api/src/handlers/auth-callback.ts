@@ -9,6 +9,7 @@ import {
 import { getConfig, getMobileDeepLink, getOAuthRedirectUri } from '../lib/config.js';
 import { consumeOAuthState, putOAuthSession } from '../lib/dynamo.js';
 import { getSecretOrEnv } from '../lib/secrets.js';
+import { fetchUserEmail, redactEmail } from '../lib/gs-userinfo.js';
 
 const CallbackQueryZ = z.object({
   code: z.string().min(1),
@@ -78,12 +79,19 @@ export async function authCallback(c: Context): Promise<Response> {
   // claim or /me endpoint), look it up here. For now derive from env.
   const apiBaseUrl = baseUrl;
 
+  const email = await fetchUserEmail(tokens.access_token, baseUrl);
+  console.log('[auth-callback] session created', {
+    session_id_prefix: sessionId.slice(0, 8),
+    email: redactEmail(email)
+  });
+
   await putOAuthSession({
     session_id: sessionId,
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_in: tokens.expires_in,
-    api_base_url: apiBaseUrl
+    api_base_url: apiBaseUrl,
+    email
   });
 
   return c.redirect(getMobileDeepLink(sessionId, cfg), 302);

@@ -34,8 +34,16 @@ sequenceDiagram
   ASW-->>iOS: deep link delivered
   iOS->>API: POST /auth/exchange { session_id }
   API->>Dyn: consume session (one-shot)
-  API-->>iOS: { access_token, refresh_token, expires_in, api_base_url }
+  API-->>iOS: { access_token, refresh_token, expires_in, api_base_url, email? }
 ```
+
+After the token exchange the backend also calls `GET /oauth/default/userinfo`
+(the standard OIDC endpoint) with the freshly minted access token to retrieve
+the user's email. The email is persisted alongside the tokens in the
+short-lived session record and surfaced in the `/auth/exchange` response.
+The lookup is best-effort: if it fails (404, network error, malformed body)
+the sign-in still completes — `email` is simply omitted. The iOS client
+treats it as optional and falls back to "non-staff" gating in that case.
 
 ## Refresh
 
@@ -48,8 +56,14 @@ sequenceDiagram
   iOS->>API: POST /auth/refresh { refresh_token }
   API->>GS: POST /oauth/default/token (grant_type=refresh_token, client_secret)
   GS-->>API: { access_token, refresh_token?, expires_in }
-  API-->>iOS: { access_token, refresh_token?, expires_in }
+  API->>GS: GET /oauth/default/userinfo (Bearer access_token)
+  GS-->>API: { email?, sub, ... }
+  API-->>iOS: { access_token, refresh_token?, expires_in, email? }
 ```
+
+The userinfo round-trip on every refresh keeps `email` available for cold
+launches where only a refresh token is stored in the Keychain. As with the
+exchange flow, a userinfo failure does not abort the refresh.
 
 ## Security notes
 

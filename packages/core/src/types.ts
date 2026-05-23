@@ -22,7 +22,11 @@ export const AuthExchangeResponseZ = z.object({
   access_token: z.string(),
   refresh_token: z.string().optional(),
   expires_in: z.number().int().positive(),
-  api_base_url: z.string().url()
+  api_base_url: z.string().url(),
+  // Email of the authenticated GS user. The iOS app uses it to gate dev-only
+  // UI (e.g. the staging picker) on @grand-shooting.com addresses. Optional
+  // so a userinfo lookup failure doesn't break the sign-in flow.
+  email: z.string().email().optional()
 });
 export type AuthExchangeResponse = z.infer<typeof AuthExchangeResponseZ>;
 
@@ -34,9 +38,19 @@ export type AuthRefreshRequest = z.infer<typeof AuthRefreshRequestZ>;
 export const AuthRefreshResponseZ = z.object({
   access_token: z.string(),
   refresh_token: z.string().optional(),
-  expires_in: z.number().int().positive()
+  expires_in: z.number().int().positive(),
+  email: z.string().email().optional()
 });
 export type AuthRefreshResponse = z.infer<typeof AuthRefreshResponseZ>;
+
+// OIDC userinfo response from /oauth/default/userinfo. We only model the fields
+// we care about; GS may return many more claims.
+export const OIDCUserInfoZ = z.object({
+  sub: z.string().optional(),
+  email: z.string().email().optional(),
+  preferred_username: z.string().optional()
+}).passthrough();
+export type OIDCUserInfo = z.infer<typeof OIDCUserInfoZ>;
 
 // =============================================================================
 // Upload
@@ -95,6 +109,7 @@ export interface OAuthSessionRecord {
   refresh_token?: string;
   expires_in: number;
   api_base_url: string;
+  email?: string;
   expires_at: number; // epoch seconds, used as TTL attr
   created_at: number;
 }
