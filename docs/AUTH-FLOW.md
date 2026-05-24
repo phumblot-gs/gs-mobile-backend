@@ -1,25 +1,32 @@
 # Auth flow
 
 The Grand Shooting API speaks OAuth2 Authorization Code, **and requires a
-`client_secret`**. Because we can't ship the secret in the iOS app, this
-backend acts as a confidential client. The iOS app starts the dance, the
-backend completes it, and the backend hands tokens back to the app via a
-one-shot session id.
+`client_secret`**. Because we can't ship the secret in the mobile apps, this
+backend acts as a confidential client. The mobile app starts the dance, the
+backend completes it, and the backend hands tokens back via a one-shot
+session id.
+
+Both the iOS and Android clients use the same flow and the same deep-link
+scheme (`gsmobile://auth/done?session_id=…`). The originating platform is
+declared up-front via `GET /auth/start?platform=ios|android`; missing values
+default to `ios` for back-compat. The value is stored on the OAuth state and
+session records purely for log distinction — it doesn't leak back to the
+client in the `/auth/exchange` response.
 
 ## Sequence
 
 ```mermaid
 sequenceDiagram
-  participant iOS as iOS app
-  participant ASW as ASWebAuthenticationSession
+  participant iOS as iOS / Android app
+  participant ASW as System browser (SFAS / Chrome Custom Tabs)
   participant API as Mobile backend
   participant Dyn as DynamoDB
   participant GS as Grand Shooting
 
-  iOS->>ASW: open(start_url)
-  ASW->>API: GET /auth/start
-  API->>API: state = randomBytes(32)
-  API->>Dyn: put OAuth state (TTL 5min)
+  iOS->>ASW: open(start_url with platform=ios|android)
+  ASW->>API: GET /auth/start?platform=…
+  API->>API: validate platform + state = randomBytes(32)
+  API->>Dyn: put OAuth state + platform (TTL 5min)
   API-->>ASW: 302 -> GS authorize URL
   ASW->>GS: GET /oauth/default/authorize
   GS->>ASW: user logs in

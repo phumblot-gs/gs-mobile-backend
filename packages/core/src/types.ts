@@ -4,6 +4,11 @@ import { z } from 'zod';
 // OAuth
 // =============================================================================
 
+// Mobile client platform initiating the OAuth dance. Defaults to `ios` on the
+// server when the query param is missing — existing iOS clients don't send it.
+export const PlatformZ = z.enum(['ios', 'android']);
+export type Platform = z.infer<typeof PlatformZ>;
+
 export const OAuthTokenResponseZ = z.object({
   access_token: z.string(),
   refresh_token: z.string().optional(),
@@ -99,6 +104,7 @@ export type PackshotResponse = z.infer<typeof PackshotResponseZ>;
 
 export interface OAuthStateRecord {
   state: string;
+  platform?: Platform;
   expires_at: number; // epoch seconds, used as TTL attr
   created_at: number;
 }
@@ -110,6 +116,7 @@ export interface OAuthSessionRecord {
   expires_in: number;
   api_base_url: string;
   email?: string;
+  platform?: Platform;
   expires_at: number; // epoch seconds, used as TTL attr
   created_at: number;
 }
