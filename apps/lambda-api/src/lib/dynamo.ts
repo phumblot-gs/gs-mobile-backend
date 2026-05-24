@@ -6,7 +6,7 @@ import {
   GetCommand
 } from '@aws-sdk/lib-dynamodb';
 import { getConfig } from './config.js';
-import type { OAuthSessionRecord, OAuthStateRecord } from '@gs-mobile-backend/core';
+import type { OAuthSessionRecord, OAuthStateRecord, Platform } from '@gs-mobile-backend/core';
 
 let _doc: DynamoDBDocumentClient | undefined;
 
@@ -25,10 +25,11 @@ function doc(): DynamoDBDocumentClient {
 
 const STATE_TTL_SECONDS = 5 * 60;
 
-export async function putOAuthState(state: string): Promise<void> {
+export async function putOAuthState(state: string, platform?: Platform): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const record: OAuthStateRecord = {
     state,
+    platform,
     created_at: now,
     expires_at: now + STATE_TTL_SECONDS
   };

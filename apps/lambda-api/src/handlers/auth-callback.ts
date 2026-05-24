@@ -80,8 +80,10 @@ export async function authCallback(c: Context): Promise<Response> {
   const apiBaseUrl = baseUrl;
 
   const email = await fetchUserEmail(tokens.access_token, baseUrl);
+  const platform = stateRecord.platform;
   console.log('[auth-callback] session created', {
     session_id_prefix: sessionId.slice(0, 8),
+    platform: platform ?? 'unknown',
     email: redactEmail(email)
   });
 
@@ -91,7 +93,8 @@ export async function authCallback(c: Context): Promise<Response> {
     refresh_token: tokens.refresh_token,
     expires_in: tokens.expires_in,
     api_base_url: apiBaseUrl,
-    email
+    email,
+    platform
   });
 
   return c.redirect(getMobileDeepLink(sessionId, cfg), 302);
