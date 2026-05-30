@@ -27,12 +27,44 @@ gs-mobile-backend/
 | Method | Path             | Purpose                                      |
 | -----: | ---------------- | -------------------------------------------- |
 | GET    | `/health`        | health probe                                 |
-| GET    | `/auth/start`    | begin OAuth flow (redirects to GS)           |
-| GET    | `/auth/callback` | OAuth redirect target; redirects to gsmobile:// |
+| GET    | `/auth/start`    | begin OAuth flow (redirects to GS); accepts `?platform=ios\|android` |
+| GET    | `/auth/callback` | OAuth redirect target; redirects to `gsmobile://auth/done?session_id=…` |
 | POST   | `/auth/exchange` | one-shot swap of session_id for tokens       |
 | POST   | `/auth/refresh`  | refresh access token via refresh_token       |
 | POST   | `/upload/init`   | get a presigned PUT URL                      |
 | POST   | `/packshot`      | process an uploaded image                    |
+| GET    | `/account/settings` | list central settings pointers for the caller's main account |
+| GET    | `/account/settings/{active}` | get current settings for a pair |
+| POST   | `/account/settings/{active}` | push a new settings version (no-op on hash match) |
+| GET    | `/account/settings/{active}/history` | list versions (metadata) |
+| GET    | `/account/settings/{active}/history/{ulid}` | get a historical version with blob |
+| POST   | `/account/settings/{active}/history/{ulid}/restore` | move pointer to an existing version |
+| DELETE | `/account/settings/{active}/history/{ulid}` | soft-delete a non-current version |
+
+### Mobile clients — deep-link contract
+
+Both the iOS and Android apps drive the OAuth dance through the system
+browser (`ASWebAuthenticationSession` on iOS, Chrome Custom Tabs on Android).
+The contract is identical across platforms:
+
+1. Open `<backend>/auth/start?platform=ios` (or `platform=android`). The
+   `platform` query param is optional — when omitted the server defaults to
+   `ios` to stay back-compat with the legacy iOS client. Any other value
+   returns 400.
+2. After the GS portal flow completes, the backend 302-redirects to
+   **`gsmobile://auth/done?session_id=<hex>`**. This scheme + path must be
+   declared in:
+   - iOS: `CFBundleURLSchemes` = `gsmobile` (handled in `AuthDeepLinkHandler`).
+   - Android: an `<intent-filter>` on the launcher activity with
+     `<data android:scheme="gsmobile" android:host="auth" android:path="/done" />`.
+3. The client `POST`s the `session_id` to `/auth/exchange` once. The
+   response payload is platform-agnostic:
+   `{ access_token, refresh_token?, expires_in, api_base_url, email? }`.
+4. Refresh via `POST /auth/refresh` with `{ refresh_token }`.
+
+The OAuth state is held server-side in DynamoDB, not in cookies — so
+neither the SFAS sandbox on iOS nor the user's default Chrome profile on
+Android needs to carry anything between the browser tab and the app.
 
 ## Local dev (3-5 steps from clone)
 
@@ -118,7 +150,7 @@ The script prompts interactively for each secret value. Required values:
 
 - `gs-mobile/staging/gs-oauth-client-id` — from Grand Shooting plugin admin
 - `gs-mobile/staging/gs-oauth-client-secret` — from Grand Shooting plugin admin
-- `gs-mobile/staging/gs-oauth-base-url` — e.g. `https://api-19.grand-shooting.com`
+- `gs-mobile/staging/gs-oauth-base-url` — `https://api.grand-shooting.com` (host serving `/oauth/default/authorize` and `/oauth/default/token`)
 - `gs-mobile/staging/photoroom-api-key` — from Photoroom dashboard
 - `gs-mobile/staging/autoretouch-api-key` — from Autoretouch dashboard
 
@@ -162,7 +194,7 @@ See `apps/lambda-api/src/lib/config.ts` for the Zod schema. Required:
 | `S3_UPLOADS_BUCKET`              | uploads bucket name                    |
 | `S3_PACKSHOTS_BUCKET`            | packshots bucket name                  |
 | `PUBLIC_BASE_URL`                | e.g. `https://api.mobile.grand-shooting.com` |
-| `MOBILE_DEEP_LINK_SCHEME`        | iOS scheme (default `gsmobile`)        |
+| `MOBILE_DEEP_LINK_SCHEME`        | shared iOS/Android scheme (default `gsmobile`) |
 | `SECRET_GS_OAUTH_CLIENT_ID`      | Secrets Manager secret ID              |
 | `SECRET_GS_OAUTH_CLIENT_SECRET`  | Secrets Manager secret ID              |
 | `SECRET_GS_OAUTH_BASE_URL`       | Secrets Manager secret ID              |

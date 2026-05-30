@@ -6,6 +6,12 @@
 #
 # Prompts interactively for each secret. Existing values are preserved when the
 # user submits an empty line.
+#
+# After seeding, the script reads each secret back and refuses to exit
+# successfully if any one of them is still at the Terraform placeholder
+# `REPLACE_ME` (or empty) — the most common foot-gun is to accidentally skip
+# the gs-oauth-client-id prompt with an empty Enter, ship the Lambda, and
+# discover the OAuth flow forwarding `client_id=REPLACE_ME` to GS.
 
 set -euo pipefail
 
@@ -40,6 +46,34 @@ for SECRET in "${SECRETS[@]}"; do
     >/dev/null
   echo "  updated"
 done
+
+echo
+echo "=== Verifying secrets state ==="
+BAD_SECRETS=()
+for SECRET in "${SECRETS[@]}"; do
+  CURRENT=$(aws secretsmanager get-secret-value \
+    --secret-id "${SECRET}" \
+    --region "${REGION}" \
+    --query SecretString \
+    --output text 2>/dev/null || echo "<missing>")
+  if [[ "${CURRENT}" == "REPLACE_ME" ]] || [[ "${CURRENT}" == "<missing>" ]] || [[ -z "${CURRENT}" ]]; then
+    echo "  ✗ ${SECRET}: still placeholder (${CURRENT})"
+    BAD_SECRETS+=("${SECRET}")
+  else
+    echo "  ✓ ${SECRET}: set"
+  fi
+done
+
+if (( ${#BAD_SECRETS[@]} > 0 )); then
+  echo
+  echo "ERROR: ${#BAD_SECRETS[@]} secret(s) still holding a placeholder. The Lambda" >&2
+  echo "will forward 'REPLACE_ME' to upstreams (e.g. GS OAuth) and the flow will" >&2
+  echo "break. Re-run this script and provide a real value for:" >&2
+  for S in "${BAD_SECRETS[@]}"; do
+    echo "  - ${S}" >&2
+  done
+  exit 2
+fi
 
 echo
 echo "Done."

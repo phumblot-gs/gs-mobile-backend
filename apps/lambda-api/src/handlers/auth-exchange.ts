@@ -28,7 +28,12 @@ export async function authExchange(c: Context): Promise<Response> {
     access_token: session.access_token,
     refresh_token: session.refresh_token,
     expires_in: session.expires_in,
-    api_base_url: session.api_base_url
+    api_base_url: session.api_base_url,
+    email: session.email,
+    account_id: session.account_id,
+    user_uid: session.user_uid,
+    user_name: session.user_name,
+    accounts: session.accounts
   });
 
   return c.json(payload);

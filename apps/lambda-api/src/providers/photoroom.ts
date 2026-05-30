@@ -16,7 +16,10 @@ import type { PackshotProvider } from './types.js';
 export class PhotoroomProvider implements PackshotProvider {
   readonly name = 'photoroom';
 
-  async process(input: { buffer: Buffer; mimeType: string }): Promise<{ buffer: Buffer; mimeType: string }> {
+  async process(
+    input: { buffer: Buffer; mimeType: string },
+    _opts: { workflowId?: string } = {}
+  ): Promise<{ buffer: Buffer; mimeType: string }> {
     const cfg = getConfig();
     const apiKey = await getSecretOrEnv(cfg.PHOTOROOM_API_KEY, cfg.SECRET_PHOTOROOM_API_KEY);
 

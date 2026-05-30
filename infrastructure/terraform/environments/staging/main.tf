@@ -35,6 +35,13 @@ module "lambda" {
   dynamodb_oauth_sessions_name = module.dynamodb.oauth_sessions_table_name
   dynamodb_oauth_sessions_arn  = module.dynamodb.oauth_sessions_table_arn
 
+  dynamodb_account_settings_pointer_name    = module.dynamodb.account_settings_pointer_table_name
+  dynamodb_account_settings_pointer_arn     = module.dynamodb.account_settings_pointer_table_arn
+  dynamodb_account_settings_version_name    = module.dynamodb.account_settings_version_table_name
+  dynamodb_account_settings_version_arn     = module.dynamodb.account_settings_version_table_arn
+  dynamodb_account_settings_rate_limit_name = module.dynamodb.account_settings_rate_limit_table_name
+  dynamodb_account_settings_rate_limit_arn  = module.dynamodb.account_settings_rate_limit_table_arn
+
   s3_uploads_bucket_name   = module.s3.uploads_bucket_name
   s3_uploads_bucket_arn    = module.s3.uploads_bucket_arn
   s3_packshots_bucket_name = module.s3.packshots_bucket_name
