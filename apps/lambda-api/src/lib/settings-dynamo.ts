@@ -12,7 +12,6 @@ import { ulid } from 'ulid';
 import {
   type AccountSettingsPointerRecord,
   type AccountSettingsVersionRecord,
-  type LastAction,
   SETTINGS_HISTORY_CAP_PER_PAIR
 } from '@gs-mobile-backend/core';
 import { getConfig } from './config.js';

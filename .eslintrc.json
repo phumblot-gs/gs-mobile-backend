@@ -13,7 +13,11 @@
   "rules": {
     "@typescript-eslint/no-explicit-any": "warn",
     "@typescript-eslint/explicit-module-boundary-types": "off",
-    "no-console": ["warn", { "allow": ["warn", "error"] }]
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ],
+    "no-console": ["warn", { "allow": ["warn", "error", "log"] }]
   },
   "ignorePatterns": ["dist", "node_modules", "*.config.js", "*.config.ts"]
 }
