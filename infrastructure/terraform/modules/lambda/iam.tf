@@ -44,6 +44,33 @@ resource "aws_iam_role_policy" "lambda" {
         ]
       },
       {
+        Sid    = "DynamoDBAccountSettingsTables"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:Query"
+        ]
+        Resource = [
+          var.dynamodb_account_settings_pointer_arn,
+          var.dynamodb_account_settings_version_arn,
+          var.dynamodb_account_settings_rate_limit_arn
+        ]
+      },
+      {
+        Sid    = "DynamoDBAccountSettingsTransactWrites"
+        Effect = "Allow"
+        Action = [
+          "dynamodb:TransactWriteItems"
+        ]
+        Resource = [
+          var.dynamodb_account_settings_pointer_arn,
+          var.dynamodb_account_settings_version_arn
+        ]
+      },
+      {
         Sid    = "S3UploadsRead"
         Effect = "Allow"
         Action = [

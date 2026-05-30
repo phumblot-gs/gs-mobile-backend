@@ -33,6 +33,13 @@ gs-mobile-backend/
 | POST   | `/auth/refresh`  | refresh access token via refresh_token       |
 | POST   | `/upload/init`   | get a presigned PUT URL                      |
 | POST   | `/packshot`      | process an uploaded image                    |
+| GET    | `/account/settings` | list central settings pointers for the caller's main account |
+| GET    | `/account/settings/{active}` | get current settings for a pair |
+| POST   | `/account/settings/{active}` | push a new settings version (no-op on hash match) |
+| GET    | `/account/settings/{active}/history` | list versions (metadata) |
+| GET    | `/account/settings/{active}/history/{ulid}` | get a historical version with blob |
+| POST   | `/account/settings/{active}/history/{ulid}/restore` | move pointer to an existing version |
+| DELETE | `/account/settings/{active}/history/{ulid}` | soft-delete a non-current version |
 
 ### Mobile clients — deep-link contract
 

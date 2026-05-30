@@ -10,6 +10,17 @@ import { authRefresh } from './handlers/auth-refresh.js';
 import { authDeactivate } from './handlers/auth-deactivate.js';
 import { uploadInit } from './handlers/upload-init.js';
 import { packshot } from './handlers/packshot.js';
+import {
+  listAllSettings,
+  getSettings,
+  postSettings,
+  listHistory,
+  getHistoryVersion,
+  restoreHistoryVersion,
+  deleteHistoryVersion
+} from './handlers/settings/index.js';
+import { identityMiddleware } from './middleware/identity.js';
+import { pullRateLimit, pushRateLimit } from './middleware/rate-limit.js';
 
 export const app = new Hono();
 
@@ -56,6 +67,21 @@ app.post('/auth/deactivate', authDeactivate);
 // =============================================================================
 app.post('/upload/init', uploadInit);
 app.post('/packshot', packshot);
+
+// =============================================================================
+// Account settings sync — identity middleware on all routes, plus per-verb
+// rate limiting.
+// =============================================================================
+app.use('/account/settings/*', identityMiddleware);
+app.use('/account/settings', identityMiddleware);
+
+app.get('/account/settings', pullRateLimit, listAllSettings);
+app.get('/account/settings/:active_account_id', pullRateLimit, getSettings);
+app.post('/account/settings/:active_account_id', pushRateLimit, postSettings);
+app.get('/account/settings/:active_account_id/history', pullRateLimit, listHistory);
+app.get('/account/settings/:active_account_id/history/:version_id', pullRateLimit, getHistoryVersion);
+app.post('/account/settings/:active_account_id/history/:version_id/restore', pushRateLimit, restoreHistoryVersion);
+app.delete('/account/settings/:active_account_id/history/:version_id', pushRateLimit, deleteHistoryVersion);
 
 // =============================================================================
 // Error handling

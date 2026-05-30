@@ -3,18 +3,24 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 // Stub AWS + secrets BEFORE importing the app.
 vi.mock('../lib/dynamo.js', () => {
   type Platform = 'ios' | 'android';
-  const states = new Map<string, { state: string; platform?: Platform; expires_at: number; created_at: number }>();
-  const sessions = new Map<string, {
+  type Account = { account_id: number; company: string };
+  type Session = {
     session_id: string;
     access_token: string;
     refresh_token?: string;
     expires_in: number;
     api_base_url: string;
     email?: string;
+    account_id?: number;
+    user_uid?: number;
+    user_name?: string;
+    accounts?: Account[];
     platform?: Platform;
     expires_at: number;
     created_at: number;
-  }>();
+  };
+  const states = new Map<string, { state: string; platform?: Platform; expires_at: number; created_at: number }>();
+  const sessions = new Map<string, Session>();
   return {
     putOAuthState: vi.fn(async (state: string, platform?: Platform) => {
       states.set(state, { state, platform, expires_at: Date.now() / 1000 + 300, created_at: Date.now() / 1000 });
@@ -25,8 +31,8 @@ vi.mock('../lib/dynamo.js', () => {
       states.delete(state);
       return v;
     }),
-    putOAuthSession: vi.fn(async (rec: { session_id: string; access_token: string; refresh_token?: string; expires_in: number; api_base_url: string; email?: string; platform?: Platform }) => {
-      const full = { ...rec, expires_at: Date.now() / 1000 + 60, created_at: Date.now() / 1000 };
+    putOAuthSession: vi.fn(async (rec: Omit<Session, 'expires_at' | 'created_at'>) => {
+      const full: Session = { ...rec, expires_at: Date.now() / 1000 + 60, created_at: Date.now() / 1000 };
       sessions.set(rec.session_id, full);
       return full;
     }),
@@ -53,6 +59,9 @@ const baseEnv = {
   AWS_REGION: 'eu-west-1',
   DYNAMO_OAUTH_STATE_TABLE: 'state-test',
   DYNAMO_OAUTH_SESSIONS_TABLE: 'sessions-test',
+  DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE: 'ptr-test',
+  DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE: 'ver-test',
+  DYNAMO_ACCOUNT_SETTINGS_RATE_LIMIT_TABLE: 'rl-test',
   S3_UPLOADS_BUCKET: 'uploads-test',
   S3_PACKSHOTS_BUCKET: 'packshots-test',
   PUBLIC_BASE_URL: 'http://localhost:3000',
@@ -170,9 +179,18 @@ describe('auth handlers', () => {
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
-      if (url.includes('/oauth/default/userinfo')) {
+      if (url.endsWith('/me')) {
         return new Response(
-          JSON.stringify({ sub: 'user-123', email: 'staff@grand-shooting.com' }),
+          JSON.stringify({
+            firstname: 'Paul H.',
+            email: 'staff@grand-shooting.com',
+            account_id: 16,
+            user_uid: 8836,
+            accounts: [
+              { account_id: 16, company: 'Grand shooting' },
+              { account_id: 957, company: 'Courrèges' }
+            ]
+          }),
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
@@ -194,11 +212,27 @@ describe('auth handlers', () => {
       body: JSON.stringify({ session_id: sessionId })
     });
     expect(ex.status).toBe(200);
-    const json = (await ex.json()) as { access_token: string; refresh_token: string; api_base_url: string; email?: string };
+    const json = (await ex.json()) as {
+      access_token: string;
+      refresh_token: string;
+      api_base_url: string;
+      email?: string;
+      account_id?: number;
+      user_uid?: number;
+      user_name?: string;
+      accounts?: Array<{ account_id: number; company: string }>;
+    };
     expect(json.access_token).toBe('tok-access');
     expect(json.refresh_token).toBe('tok-refresh');
     expect(json.api_base_url).toBe('https://api.grand-shooting.com');
     expect(json.email).toBe('staff@grand-shooting.com');
+    expect(json.account_id).toBe(16);
+    expect(json.user_uid).toBe(8836);
+    expect(json.user_name).toBe('Paul H.');
+    expect(json.accounts).toEqual([
+      { account_id: 16, company: 'Grand shooting' },
+      { account_id: 957, company: 'Courrèges' }
+    ]);
 
     // exchange is one-shot — a second call must fail
     const ex2 = await app.request('/auth/exchange', {
@@ -224,7 +258,7 @@ describe('auth handlers', () => {
     }).__states.get(stateValue);
     expect(stateRecord?.platform).toBe('android');
 
-    // 2. /auth/callback drives the rest with a stubbed token + userinfo.
+    // 2. /auth/callback drives the rest with a stubbed token + /me.
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = typeof input === 'string' ? input : (input as Request | URL).toString();
       if (url.includes('/oauth/default/token')) {
@@ -238,9 +272,15 @@ describe('auth handlers', () => {
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
-      if (url.includes('/oauth/default/userinfo')) {
+      if (url.endsWith('/me')) {
         return new Response(
-          JSON.stringify({ sub: 'u-1', email: 'droid@example.com' }),
+          JSON.stringify({
+            firstname: 'Droid',
+            email: 'droid@example.com',
+            account_id: 957,
+            user_uid: 7777,
+            accounts: [{ account_id: 957, company: 'Courrèges' }]
+          }),
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
@@ -272,10 +312,12 @@ describe('auth handlers', () => {
     expect(json.refresh_token).toBe('a-ref');
     expect(json.api_base_url).toBe('https://api.grand-shooting.com');
     expect(json.email).toBe('droid@example.com');
+    expect(json.account_id).toBe(957);
+    expect(json.user_uid).toBe(7777);
     expect(json).not.toHaveProperty('platform');
   });
 
-  it('GET /auth/callback still succeeds when userinfo lookup fails', async () => {
+  it('GET /auth/callback still succeeds when /me lookup fails', async () => {
     const { resetConfigCache } = await import('../lib/config.js');
     resetConfigCache();
     const dynamo = await import('../lib/dynamo.js');
@@ -297,7 +339,7 @@ describe('auth handlers', () => {
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
-      // Simulate a userinfo endpoint that doesn't exist on this GS deployment.
+      // Simulate /me being down / missing.
       return new Response('not found', { status: 404 });
     });
 
@@ -311,12 +353,13 @@ describe('auth handlers', () => {
       body: JSON.stringify({ session_id: sessionId })
     });
     expect(ex.status).toBe(200);
-    const json = (await ex.json()) as { access_token: string; email?: string };
+    const json = (await ex.json()) as { access_token: string; email?: string; account_id?: number };
     expect(json.access_token).toBe('tok-access-2');
     expect(json.email).toBeUndefined();
+    expect(json.account_id).toBeUndefined();
   });
 
-  it('POST /auth/refresh proxies refresh_token to GS and includes email', async () => {
+  it('POST /auth/refresh proxies refresh_token to GS and includes identity', async () => {
     const { resetConfigCache } = await import('../lib/config.js');
     resetConfigCache();
     const { app } = await import('../index.js');
@@ -329,9 +372,15 @@ describe('auth handlers', () => {
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
-      if (url.includes('/oauth/default/userinfo')) {
+      if (url.endsWith('/me')) {
         return new Response(
-          JSON.stringify({ sub: 'user-123', email: 'someone@example.com' }),
+          JSON.stringify({
+            firstname: 'Someone',
+            email: 'someone@example.com',
+            account_id: 42,
+            user_uid: 1234,
+            accounts: [{ account_id: 42, company: 'Acme' }]
+          }),
           { status: 200, headers: { 'content-type': 'application/json' } }
         );
       }
@@ -344,8 +393,17 @@ describe('auth handlers', () => {
       body: JSON.stringify({ refresh_token: 'old-refresh' })
     });
     expect(res.status).toBe(200);
-    const json = (await res.json()) as { access_token: string; email?: string };
+    const json = (await res.json()) as {
+      access_token: string;
+      email?: string;
+      account_id?: number;
+      user_uid?: number;
+      user_name?: string;
+    };
     expect(json.access_token).toBe('new-access');
     expect(json.email).toBe('someone@example.com');
+    expect(json.account_id).toBe(42);
+    expect(json.user_uid).toBe(1234);
+    expect(json.user_name).toBe('Someone');
   });
 });
