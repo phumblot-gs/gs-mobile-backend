@@ -193,6 +193,7 @@ function stubMe(opts: {
   userUid?: number;
   firstname?: string;
   email?: string;
+  role?: string | null; // null = field omitted (non-admin); default = "admin"
   accounts?: Array<{ account_id: number; company: string }>;
   status?: number;
 }): void {
@@ -202,12 +203,14 @@ function stubMe(opts: {
       if (opts.status && opts.status >= 400) {
         return new Response('error', { status: opts.status });
       }
+      const role = opts.role === null ? undefined : (opts.role ?? 'admin');
       return new Response(
         JSON.stringify({
           firstname: opts.firstname ?? 'Paul H.',
           email: opts.email ?? 'paul@grand-shooting.com',
           account_id: opts.accountId ?? 16,
           user_uid: opts.userUid ?? 8836,
+          ...(role !== undefined ? { role } : {}),
           accounts: opts.accounts ?? [
             { account_id: 16, company: 'Grand shooting' },
             { account_id: 957, company: 'Courrèges' }
@@ -486,6 +489,37 @@ describe('settings handlers', () => {
     expect(res.status).toBe(502);
   });
 
+  it('403 not_admin when /me returns role != admin', async () => {
+    stubMe({ role: 'user' });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', { headers: AUTH_HEADER });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { code: string; details: { role: string | null } };
+    expect(json.code).toBe('not_admin');
+    expect(json.details.role).toBe('user');
+  });
+
+  it('403 not_admin when /me omits role entirely', async () => {
+    stubMe({ role: null });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', { headers: AUTH_HEADER });
+    expect(res.status).toBe(403);
+    const json = (await res.json()) as { code: string; details: { role: string | null } };
+    expect(json.code).toBe('not_admin');
+    expect(json.details.role).toBeNull();
+  });
+
+  it('403 not_admin blocks push too (not only reads)', async () => {
+    stubMe({ role: 'viewer' });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings/957', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({ settings_blob: { a: 1 } })
+    });
+    expect(res.status).toBe(403);
+  });
+
   it('falls back to account_id when /me omits user_uid', async () => {
     // GS /v3/account/me doesn't return user_uid today — middleware must use
     // account_id as the stable identifier instead of failing.
@@ -496,7 +530,7 @@ describe('settings handlers', () => {
           JSON.stringify({
             firstname: 'Pierre',
             account_id: 2584,
-            role: 'admin',
+            role: 'admin', // admin so the request isn't 403'd by requireAdmin
             accounts: [
               { account_id: 2584, company: 'Acme', api_host: 'https://api-42.grand-shooting.com' }
             ]

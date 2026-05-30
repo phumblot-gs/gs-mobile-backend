@@ -20,6 +20,7 @@ apps/lambda-api/src/
 │   └── index.ts                # 7 endpoints (list / get / push / history / restore / delete)
 ├── middleware/
 │   ├── identity.ts             # /me → ResolvedIdentity, in-memory cache 5 min
+│   ├── require-admin.ts        # 403 not_admin unless identity.role === "admin"
 │   └── rate-limit.ts           # push 1/5s per (main,active), pull 30/min per user_uid
 ├── lib/
 │   ├── canonical-hash.ts       # RFC 8785 subset, SHA-256 hex
@@ -66,7 +67,28 @@ Env vars consumed (set by Terraform via the lambda module):
    stable identifier for audit fields and the per-user rate-limit key.
    Consequence: pull rate limit becomes per-tenant rather than
    per-individual-user until GS surfaces `user_uid`.
-5. Puts `ResolvedIdentity` on `c.var.identity`.
+5. Puts `ResolvedIdentity` (incl. `role`) on `c.var.identity`.
+
+## Admin role gate
+
+`middleware/require-admin.ts` runs **after** the identity middleware on
+every `/account/settings/*` route. It rejects with **`403 not_admin`**
+when `identity.role !== "admin"`. The role is read from the `role`
+field of the GS `/v3/account/me` payload.
+
+Response body:
+
+```json
+{
+  "error": "Admin role required",
+  "code": "not_admin",
+  "details": { "role": "viewer" }
+}
+```
+
+`details.role` echoes the actual GS role (`null` when the field was
+absent) so clients can branch on it — e.g. grey out the "push settings"
+button instead of just showing a generic 403.
 
 ## Rate limiting
 

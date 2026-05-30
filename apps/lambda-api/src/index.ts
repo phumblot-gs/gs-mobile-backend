@@ -20,6 +20,7 @@ import {
   deleteHistoryVersion
 } from './handlers/settings/index.js';
 import { identityMiddleware } from './middleware/identity.js';
+import { requireAdmin } from './middleware/require-admin.js';
 import { pullRateLimit, pushRateLimit } from './middleware/rate-limit.js';
 
 export const app = new Hono();
@@ -73,7 +74,9 @@ app.post('/packshot', packshot);
 // rate limiting.
 // =============================================================================
 app.use('/account/settings/*', identityMiddleware);
+app.use('/account/settings/*', requireAdmin);
 app.use('/account/settings', identityMiddleware);
+app.use('/account/settings', requireAdmin);
 
 app.get('/account/settings', pullRateLimit, listAllSettings);
 app.get('/account/settings/:active_account_id', pullRateLimit, getSettings);
