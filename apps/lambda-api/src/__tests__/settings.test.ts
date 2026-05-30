@@ -486,6 +486,40 @@ describe('settings handlers', () => {
     expect(res.status).toBe(502);
   });
 
+  it('falls back to account_id when /me omits user_uid', async () => {
+    // GS /v3/account/me doesn't return user_uid today — middleware must use
+    // account_id as the stable identifier instead of failing.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request | URL).toString();
+      if (url.endsWith('/me')) {
+        return new Response(
+          JSON.stringify({
+            firstname: 'Pierre',
+            account_id: 2584,
+            role: 'admin',
+            accounts: [
+              { account_id: 2584, company: 'Acme', api_host: 'https://api-42.grand-shooting.com' }
+            ]
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      return new Response('not stubbed', { status: 500 });
+    });
+
+    const { app } = await import('../index.js');
+    nextUlid = (() => () => '01HVEEEEEEEEEEEEEEEEEEEE00')();
+    const res = await app.request('/account/settings/2584', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({ settings_blob: { a: 1 } })
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { updated_by_user_uid: number };
+    // account_id is the fallback identifier.
+    expect(json.updated_by_user_uid).toBe(2584);
+  });
+
   it('identity is cached across calls (single /me invocation)', async () => {
     stubMe({});
     const fetchSpy = vi.spyOn(globalThis, 'fetch');

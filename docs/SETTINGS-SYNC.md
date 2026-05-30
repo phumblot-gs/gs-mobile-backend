@@ -55,11 +55,18 @@ Env vars consumed (set by Terraform via the lambda module):
    401 if missing/malformed.
 2. Looks up the SHA-256 of the token in a module-level `Map` (5-minute
    TTL, lives for the warm lifetime of the Lambda instance).
-3. On cache miss: `GET /me` on the GS OAuth host.
-   - 401 from GS → 401 to client (token expired; client must refresh).
+3. On cache miss: `GET /v3/account/me` on the GS host.
+   - 4xx from GS (401/403/404) → 401 to client (token rejected; client
+     must refresh). GS returns 404 for an invalid token, hence the
+     wide mapping.
    - 5xx / malformed → 502 `upstream_error`.
-   - Missing `account_id` / `user_uid` / non-empty `accounts[]` → 502.
-4. Puts `ResolvedIdentity` on `c.var.identity`.
+   - Missing `account_id` or empty `accounts[]` → 502.
+4. **`user_uid` fallback** : the real GS payload doesn't expose
+   `user_uid` today. The middleware falls back to `account_id` as the
+   stable identifier for audit fields and the per-user rate-limit key.
+   Consequence: pull rate limit becomes per-tenant rather than
+   per-individual-user until GS surfaces `user_uid`.
+5. Puts `ResolvedIdentity` on `c.var.identity`.
 
 ## Rate limiting
 
