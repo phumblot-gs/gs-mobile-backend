@@ -91,16 +91,22 @@ export const identityMiddleware: MiddlewareHandler = async (c, next) => {
   const ident = meToIdentity(me);
   if (
     typeof ident.account_id !== 'number' ||
-    typeof ident.user_uid !== 'number' ||
     !ident.accounts ||
     ident.accounts.length === 0
   ) {
     throw new UpstreamError('Incomplete identity payload from /me');
   }
 
+  // GS /v3/account/me doesn't currently expose user_uid. Fall back to
+  // account_id so audit fields and the per-user rate-limit bucket still
+  // have a stable identifier. The trade-off: rate limits become per-tenant
+  // instead of per-individual-user. Acceptable until GS surfaces user_uid.
+  const userUid =
+    typeof ident.user_uid === 'number' ? ident.user_uid : ident.account_id;
+
   const resolved: ResolvedIdentity = {
     mainAccountId: ident.account_id,
-    userUid: ident.user_uid,
+    userUid,
     userName: ident.user_name ?? '',
     email: ident.email,
     accounts: ident.accounts

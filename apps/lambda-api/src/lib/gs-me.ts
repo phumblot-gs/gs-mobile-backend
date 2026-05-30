@@ -46,7 +46,9 @@ export async function fetchMeStrict(
   accessToken: string,
   oauthBaseUrl: string
 ): Promise<GSMeResponse> {
-  const url = new URL('/me', oauthBaseUrl).toString();
+  // The endpoint historically advertised as `/me` is actually exposed under
+  // `/v3/account/me` on the GS API host. The OAuth host serves a 404 for `/me`.
+  const url = new URL('/v3/account/me', oauthBaseUrl).toString();
   let res: Response;
   try {
     res = await fetch(url, {

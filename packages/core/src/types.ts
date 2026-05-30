@@ -23,22 +23,27 @@ export const AuthExchangeRequestZ = z.object({
 });
 export type AuthExchangeRequest = z.infer<typeof AuthExchangeRequestZ>;
 
-// GS account membership entry as returned by /me.
+// GS account membership entry as returned by /v3/account/me. `api_host` is
+// the per-tenant shard hostname the client should target for /v3/* calls
+// once it's switched to that account.
 export const GSAccountZ = z.object({
   account_id: z.number().int(),
-  company: z.string()
-});
+  company: z.string(),
+  api_host: z.string().optional()
+}).passthrough();
 export type GSAccount = z.infer<typeof GSAccountZ>;
 
-// Response from GET /me on the GS OAuth host. Only the fields we use are
-// modelled; the response may contain more.
+// Response from GET /v3/account/me on the GS API host. Only the fields we
+// use are modelled; the response may contain more. `user_uid` is NOT
+// returned by GS today — callers must tolerate its absence.
 export const GSMeResponseZ = z.object({
   firstname: z.string().optional(),
   login: z.string().optional(),
-  email: z.string().optional(), // GS uses non-standard values here (e.g. login codes), not always RFC-valid
+  email: z.string().optional(), // GS sometimes returns a login code here, not always RFC-valid
   company: z.string().optional(),
   account_id: z.number().int().optional(),
   user_uid: z.number().int().optional(),
+  role: z.string().optional(),
   accounts: z.array(GSAccountZ).optional()
 }).passthrough();
 export type GSMeResponse = z.infer<typeof GSMeResponseZ>;
