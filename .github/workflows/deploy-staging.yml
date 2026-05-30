@@ -128,6 +128,30 @@ jobs:
             --runtime nodejs22.x
         continue-on-error: true
 
+      - name: Smoke check — placeholder secrets must not leak to GS
+        run: |
+          # Give the Lambda a few seconds to settle after update-function-code.
+          sleep 5
+          LOCATION=$(curl -s -o /dev/null -D - \
+            'https://api-staging.mobile.grand-shooting.com/auth/start?platform=ios' \
+            | tr -d '\r' \
+            | awk -F': ' 'tolower($1) == "location" { print $2 }')
+          echo "Location: ${LOCATION}"
+          if [ -z "${LOCATION}" ]; then
+            echo "::error::/auth/start did not redirect; deploy is broken."
+            exit 1
+          fi
+          if echo "${LOCATION}" | grep -q 'client_id=REPLACE_ME'; then
+            echo "::error::OAuth client_id is REPLACE_ME — seed-secrets was not run or skipped this entry."
+            echo "::error::Run 'ENV=staging ./scripts/seed-secrets.sh' and force a Lambda cold start."
+            exit 1
+          fi
+          if ! echo "${LOCATION}" | grep -q 'client_id='; then
+            echo "::error::No client_id in the redirect Location — /auth/start is misconfigured."
+            exit 1
+          fi
+          echo "✓ /auth/start redirects with a real client_id"
+
   notify:
     name: Notify
     runs-on: ubuntu-latest
