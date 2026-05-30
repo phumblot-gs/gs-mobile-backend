@@ -54,9 +54,12 @@ export async function fetchMeStrict(
     res = await fetch(url, {
       method: 'GET',
       headers: {
-        // GS accepts both `access_token` and `Bearer` schemes; use `Bearer`
-        // for consistency with the existing /oauth/default/* calls.
-        authorization: `Bearer ${accessToken}`,
+        // GS issues OAuth tokens that must be presented with the
+        // `access_token` scheme. `Bearer` is reserved for direct-API
+        // tokens issued through the account-management module — using
+        // `Bearer` here returns 401 "Missing authentication" even with
+        // a valid OAuth token.
+        authorization: `access_token ${accessToken}`,
         accept: 'application/json'
       }
     });
