@@ -20,19 +20,22 @@ resource "aws_lambda_function" "api" {
 
   environment {
     variables = {
-      ENVIRONMENT                  = var.environment
-      AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
-      DYNAMO_OAUTH_STATE_TABLE     = var.dynamodb_oauth_state_name
-      DYNAMO_OAUTH_SESSIONS_TABLE  = var.dynamodb_oauth_sessions_name
-      S3_UPLOADS_BUCKET            = var.s3_uploads_bucket_name
-      S3_PACKSHOTS_BUCKET          = var.s3_packshots_bucket_name
-      PUBLIC_BASE_URL              = var.public_base_url
-      MOBILE_DEEP_LINK_SCHEME      = var.mobile_deep_link_scheme
-      SECRET_GS_OAUTH_CLIENT_ID    = var.secret_gs_oauth_client_id_name
-      SECRET_GS_OAUTH_CLIENT_SECRET = var.secret_gs_oauth_client_secret_name
-      SECRET_GS_OAUTH_BASE_URL     = var.secret_gs_oauth_base_url_name
-      SECRET_PHOTOROOM_API_KEY     = var.secret_photoroom_api_key_name
-      SECRET_AUTORETOUCH_API_KEY   = var.secret_autoretouch_api_key_name
+      ENVIRONMENT                              = var.environment
+      AWS_NODEJS_CONNECTION_REUSE_ENABLED      = "1"
+      DYNAMO_OAUTH_STATE_TABLE                 = var.dynamodb_oauth_state_name
+      DYNAMO_OAUTH_SESSIONS_TABLE              = var.dynamodb_oauth_sessions_name
+      DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE    = var.dynamodb_account_settings_pointer_name
+      DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE    = var.dynamodb_account_settings_version_name
+      DYNAMO_ACCOUNT_SETTINGS_RATE_LIMIT_TABLE = var.dynamodb_account_settings_rate_limit_name
+      S3_UPLOADS_BUCKET                        = var.s3_uploads_bucket_name
+      S3_PACKSHOTS_BUCKET                      = var.s3_packshots_bucket_name
+      PUBLIC_BASE_URL                          = var.public_base_url
+      MOBILE_DEEP_LINK_SCHEME                  = var.mobile_deep_link_scheme
+      SECRET_GS_OAUTH_CLIENT_ID                = var.secret_gs_oauth_client_id_name
+      SECRET_GS_OAUTH_CLIENT_SECRET            = var.secret_gs_oauth_client_secret_name
+      SECRET_GS_OAUTH_BASE_URL                 = var.secret_gs_oauth_base_url_name
+      SECRET_PHOTOROOM_API_KEY                 = var.secret_photoroom_api_key_name
+      SECRET_AUTORETOUCH_API_KEY               = var.secret_autoretouch_api_key_name
     }
   }
 

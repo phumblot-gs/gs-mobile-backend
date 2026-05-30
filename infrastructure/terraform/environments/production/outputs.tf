@@ -26,6 +26,18 @@ output "dynamodb_oauth_sessions_table" {
   value = module.dynamodb.oauth_sessions_table_name
 }
 
+output "dynamodb_account_settings_pointer_table" {
+  value = module.dynamodb.account_settings_pointer_table_name
+}
+
+output "dynamodb_account_settings_version_table" {
+  value = module.dynamodb.account_settings_version_table_name
+}
+
+output "dynamodb_account_settings_rate_limit_table" {
+  value = module.dynamodb.account_settings_rate_limit_table_name
+}
+
 output "s3_uploads_bucket" {
   value = module.s3.uploads_bucket_name
 }

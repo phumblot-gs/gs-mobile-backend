@@ -53,6 +53,36 @@ variable "dynamodb_oauth_sessions_name" {
   type        = string
 }
 
+variable "dynamodb_account_settings_pointer_arn" {
+  description = "ARN of the account-settings pointer DynamoDB table"
+  type        = string
+}
+
+variable "dynamodb_account_settings_pointer_name" {
+  description = "Name of the account-settings pointer DynamoDB table"
+  type        = string
+}
+
+variable "dynamodb_account_settings_version_arn" {
+  description = "ARN of the account-settings version DynamoDB table"
+  type        = string
+}
+
+variable "dynamodb_account_settings_version_name" {
+  description = "Name of the account-settings version DynamoDB table"
+  type        = string
+}
+
+variable "dynamodb_account_settings_rate_limit_arn" {
+  description = "ARN of the account-settings rate-limit DynamoDB table"
+  type        = string
+}
+
+variable "dynamodb_account_settings_rate_limit_name" {
+  description = "Name of the account-settings rate-limit DynamoDB table"
+  type        = string
+}
+
 variable "s3_uploads_bucket_name" {
   description = "Name of the uploads S3 bucket"
   type        = string

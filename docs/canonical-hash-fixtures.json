@@ -1,0 +1,112 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "input": {},
+      "canonical": "{}",
+      "sha256_hex": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "simple",
+      "input": {
+        "a": 1,
+        "b": "two"
+      },
+      "canonical": "{\"a\":1,\"b\":\"two\"}",
+      "sha256_hex": "f15bfc93d70801047473922f67fed863ecc7f82f0677ebb7122923aee81e0f97"
+    },
+    {
+      "name": "sorted-keys",
+      "input": {
+        "b": 1,
+        "a": [
+          2,
+          1
+        ]
+      },
+      "canonical": "{\"a\":[2,1],\"b\":1}",
+      "sha256_hex": "96cdeb5c78442219cb2cce1e0c5803b330d6a126f5e3eb79b1c9f3eb7e00e911"
+    },
+    {
+      "name": "nested-sorted-keys",
+      "input": {
+        "z": {
+          "y": 1,
+          "x": 2
+        },
+        "a": 3
+      },
+      "canonical": "{\"a\":3,\"z\":{\"x\":2,\"y\":1}}",
+      "sha256_hex": "8d4ec158025ac90e3962f423d3201b8e960ee4280830656f6e536587a1f00fe9"
+    },
+    {
+      "name": "unicode-string",
+      "input": {
+        "city": "Courrèges"
+      },
+      "canonical": "{\"city\":\"Courrèges\"}",
+      "sha256_hex": "9bd656b3003a3b2c76ced2cf356f7d3cea0eddcb9e3514c9804502f4b152e0ae"
+    },
+    {
+      "name": "special-chars",
+      "input": {
+        "msg": "line1\nline2\t\"quoted\""
+      },
+      "canonical": "{\"msg\":\"line1\\nline2\\t\\\"quoted\\\"\"}",
+      "sha256_hex": "f047857be2c17e75c9a554e7da0e3f27cb8ab7ea607ff2e7259acddfd28d5b1a"
+    },
+    {
+      "name": "numbers",
+      "input": {
+        "i": 42,
+        "f": 3.14,
+        "neg": -1,
+        "zero": 0,
+        "sci": 1e-9
+      },
+      "canonical": "{\"f\":3.14,\"i\":42,\"neg\":-1,\"sci\":1e-9,\"zero\":0}",
+      "sha256_hex": "5456eb2a5532801aa97b75a9363e5afa3b0a8375106df899b1e986899c0eb00f"
+    },
+    {
+      "name": "booleans-null",
+      "input": {
+        "ok": true,
+        "off": false,
+        "n": null
+      },
+      "canonical": "{\"n\":null,\"off\":false,\"ok\":true}",
+      "sha256_hex": "86ecda82fba33399d21eda7a8f357a6c9ada11b1d1722b9431eafd29e1e44952"
+    },
+    {
+      "name": "array-order-preserved",
+      "input": {
+        "items": [
+          3,
+          1,
+          2
+        ]
+      },
+      "canonical": "{\"items\":[3,1,2]}",
+      "sha256_hex": "de21aef9c6d6b65cfe6dc3c9159d9969659d1f5b854c6249d871036c57a26966"
+    },
+    {
+      "name": "migration-ping-pong-guard",
+      "description": "V1 reads V2 blob (incl. key unknown to V1), modifies known key, pushes union (incl. unknown key)",
+      "v2_blob_pulled": {
+        "lang": "en",
+        "photoQuality": "high",
+        "new_key_unknown_to_v1": "value"
+      },
+      "v1_local_after_modif": {
+        "lang": "fr"
+      },
+      "v1_expected_push_blob": {
+        "lang": "fr",
+        "photoQuality": "high",
+        "new_key_unknown_to_v1": "value"
+      },
+      "canonical": "{\"lang\":\"fr\",\"new_key_unknown_to_v1\":\"value\",\"photoQuality\":\"high\"}",
+      "sha256_hex": "ca40ac19412aa3d43b16bc561e8a28c0a05d1e470e26f554aaf08862fcaceac0"
+    }
+  ]
+}

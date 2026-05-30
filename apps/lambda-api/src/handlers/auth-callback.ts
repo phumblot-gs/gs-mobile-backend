@@ -9,7 +9,7 @@ import {
 import { getConfig, getMobileDeepLink, getOAuthRedirectUri } from '../lib/config.js';
 import { consumeOAuthState, putOAuthSession } from '../lib/dynamo.js';
 import { getSecretOrEnv } from '../lib/secrets.js';
-import { fetchUserEmail, redactEmail } from '../lib/gs-userinfo.js';
+import { fetchMe, redactEmail } from '../lib/gs-me.js';
 
 const CallbackQueryZ = z.object({
   code: z.string().min(1),
@@ -79,12 +79,14 @@ export async function authCallback(c: Context): Promise<Response> {
   // claim or /me endpoint), look it up here. For now derive from env.
   const apiBaseUrl = baseUrl;
 
-  const email = await fetchUserEmail(tokens.access_token, baseUrl);
+  const identity = await fetchMe(tokens.access_token, baseUrl);
   const platform = stateRecord.platform;
   console.log('[auth-callback] session created', {
     session_id_prefix: sessionId.slice(0, 8),
     platform: platform ?? 'unknown',
-    email: redactEmail(email)
+    email: redactEmail(identity.email),
+    account_id: identity.account_id,
+    user_uid: identity.user_uid
   });
 
   await putOAuthSession({
@@ -93,7 +95,11 @@ export async function authCallback(c: Context): Promise<Response> {
     refresh_token: tokens.refresh_token,
     expires_in: tokens.expires_in,
     api_base_url: apiBaseUrl,
-    email,
+    email: identity.email,
+    account_id: identity.account_id,
+    user_uid: identity.user_uid,
+    user_name: identity.user_name,
+    accounts: identity.accounts,
     platform
   });
 

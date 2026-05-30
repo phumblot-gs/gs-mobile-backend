@@ -12,6 +12,9 @@ const EnvSchema = z.object({
   // Resource names (provisioned by Terraform)
   DYNAMO_OAUTH_STATE_TABLE: z.string().min(1),
   DYNAMO_OAUTH_SESSIONS_TABLE: z.string().min(1),
+  DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE: z.string().min(1),
+  DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE: z.string().min(1),
+  DYNAMO_ACCOUNT_SETTINGS_RATE_LIMIT_TABLE: z.string().min(1),
   S3_UPLOADS_BUCKET: z.string().min(1),
   S3_PACKSHOTS_BUCKET: z.string().min(1),
 
