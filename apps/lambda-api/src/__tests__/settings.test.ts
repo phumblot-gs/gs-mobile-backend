@@ -458,8 +458,22 @@ describe('settings handlers', () => {
     expect(json.details.retry_after_seconds).toBe(4);
   });
 
-  it('401 when /me rejects the token', async () => {
+  it('401 when /me rejects the token with 401', async () => {
     stubMe({ status: 401 });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', { headers: AUTH_HEADER });
+    expect(res.status).toBe(401);
+  });
+
+  it('401 when /me returns 404 (GS variant for bad token)', async () => {
+    stubMe({ status: 404 });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', { headers: AUTH_HEADER });
+    expect(res.status).toBe(401);
+  });
+
+  it('401 when /me returns 403', async () => {
+    stubMe({ status: 403 });
     const { app } = await import('../index.js');
     const res = await app.request('/account/settings', { headers: AUTH_HEADER });
     expect(res.status).toBe(401);

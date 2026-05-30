@@ -61,8 +61,10 @@ export async function fetchMeStrict(
   } catch (err) {
     throw { kind: 'transport', message: (err as Error).message } satisfies MeStrictError;
   }
-  if (res.status === 401) {
-    throw { kind: 'unauthorized', status: 401 } satisfies MeStrictError;
+  // GS returns 404 (not 401) for an invalid or missing OAuth token; we treat
+  // every 4xx from /me as a credential issue from the client's perspective.
+  if (res.status >= 400 && res.status < 500) {
+    throw { kind: 'unauthorized', status: res.status } satisfies MeStrictError;
   }
   if (!res.ok) {
     const body = await res.text().catch(() => undefined);
