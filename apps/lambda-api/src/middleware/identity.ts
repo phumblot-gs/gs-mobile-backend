@@ -14,6 +14,7 @@ export interface ResolvedIdentity {
   userUid: number;
   userName: string;
   email?: string;
+  role?: string;
   accounts: GSAccount[];
 }
 
@@ -109,6 +110,7 @@ export const identityMiddleware: MiddlewareHandler = async (c, next) => {
     userUid,
     userName: ident.user_name ?? '',
     email: ident.email,
+    role: me.role,
     accounts: ident.accounts
   };
   cache.set(key, { identity: resolved, expiresAt: now + CACHE_TTL_MS });
