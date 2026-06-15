@@ -20,7 +20,6 @@ import {
   deleteHistoryVersion
 } from './handlers/settings/index.js';
 import { identityMiddleware } from './middleware/identity.js';
-import { requireAdmin } from './middleware/require-admin.js';
 import { pullRateLimit, pushRateLimit } from './middleware/rate-limit.js';
 
 export const app = new Hono();
@@ -74,9 +73,15 @@ app.post('/packshot', packshot);
 // rate limiting.
 // =============================================================================
 app.use('/account/settings/*', identityMiddleware);
-app.use('/account/settings/*', requireAdmin);
 app.use('/account/settings', identityMiddleware);
-app.use('/account/settings', requireAdmin);
+// NOTE: the GS-admin gate (`requireAdmin`) is intentionally NOT wired up.
+// GS `GET /v3/account/me` does not expose a `role` field (verified against the
+// live API 2026-06-16: payload is firstname/lastname/login/email/company/
+// avatar/account_id/accounts[] only — no role anywhere), so the gate rejected
+// EVERY caller with 403 not_admin, admins included. Re-enable both
+// `app.use(..., requireAdmin)` lines once GS surfaces a role on /me — and
+// re-verify the field name/value against the live payload first.
+// See middleware/require-admin.ts.
 
 app.get('/account/settings', pullRateLimit, listAllSettings);
 app.get('/account/settings/:active_account_id', pullRateLimit, getSettings);

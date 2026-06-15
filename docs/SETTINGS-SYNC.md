@@ -20,7 +20,7 @@ apps/lambda-api/src/
 │   └── index.ts                # 7 endpoints (list / get / push / history / restore / delete)
 ├── middleware/
 │   ├── identity.ts             # /me → ResolvedIdentity, in-memory cache 5 min
-│   ├── require-admin.ts        # 403 not_admin unless identity.role === "admin"
+│   ├── require-admin.ts        # DISABLED — not wired (GS /me exposes no role); see "Admin role gate"
 │   └── rate-limit.ts           # push 1/5s per (main,active), pull 30/min per user_uid
 ├── lib/
 │   ├── canonical-hash.ts       # RFC 8785 subset, SHA-256 hex
@@ -69,26 +69,26 @@ Env vars consumed (set by Terraform via the lambda module):
    per-individual-user until GS surfaces `user_uid`.
 5. Puts `ResolvedIdentity` (incl. `role`) on `c.var.identity`.
 
-## Admin role gate
+## Admin role gate — DISABLED
 
-`middleware/require-admin.ts` runs **after** the identity middleware on
-every `/account/settings/*` route. It rejects with **`403 not_admin`**
-when `identity.role !== "admin"`. The role is read from the `role`
-field of the GS `/v3/account/me` payload.
+`middleware/require-admin.ts` exists but is **not wired up** in `index.ts`.
 
-Response body:
+It was meant to reject with `403 not_admin` when `identity.role !== "admin"`,
+reading the role from the `role` field of GS `/v3/account/me`. **But GS does
+not expose a `role` field** — verified against the live API on 2026-06-16, the
+payload is only `firstname / lastname / login / email / company / avatar /
+account_id / accounts[]` (and `accounts[].prefs`, which is catalog display
+config). With `role` always absent, `identity.role` was always `undefined` and
+the gate returned `403 not_admin` for **every** caller, admins included — the
+same gap already documented for `user_uid`.
 
-```json
-{
-  "error": "Admin role required",
-  "code": "not_admin",
-  "details": { "role": "viewer" }
-}
-```
+The gate is therefore disabled: every authenticated caller with access to the
+account may read and push settings (the pre-§6 behaviour).
 
-`details.role` echoes the actual GS role (`null` when the field was
-absent) so clients can branch on it — e.g. grey out the "push settings"
-button instead of just showing a generic 403.
+**To re-enable:** un-comment the two `app.use('/account/settings...',
+requireAdmin)` lines in `index.ts`, but only **after** GS surfaces a role on
+`/me` — and re-verify the actual field name and value against the live payload
+first (don't assume it's literally `role === "admin"`).
 
 ## Rate limiting
 

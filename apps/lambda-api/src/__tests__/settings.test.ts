@@ -193,7 +193,7 @@ function stubMe(opts: {
   userUid?: number;
   firstname?: string;
   email?: string;
-  role?: string | null; // null = field omitted (non-admin); default = "admin"
+  role?: string | null; // GS does not send `role`; omitted by default. Kept for legacy callers.
   accounts?: Array<{ account_id: number; company: string }>;
   status?: number;
 }): void {
@@ -203,7 +203,7 @@ function stubMe(opts: {
       if (opts.status && opts.status >= 400) {
         return new Response('error', { status: opts.status });
       }
-      const role = opts.role === null ? undefined : (opts.role ?? 'admin');
+      const role = opts.role == null ? undefined : opts.role;
       return new Response(
         JSON.stringify({
           firstname: opts.firstname ?? 'Paul H.',
@@ -489,35 +489,13 @@ describe('settings handlers', () => {
     expect(res.status).toBe(502);
   });
 
-  it('403 not_admin when /me returns role != admin', async () => {
-    stubMe({ role: 'user' });
+  // The GS-admin gate is disabled (GS /v3/account/me exposes no `role` field),
+  // so a caller WITHOUT any role must NOT be 403'd — reads and writes proceed.
+  it('role-less /me is allowed through (admin gate disabled)', async () => {
+    stubMe({}); // no role in payload, matching the real GS response
     const { app } = await import('../index.js');
     const res = await app.request('/account/settings', { headers: AUTH_HEADER });
-    expect(res.status).toBe(403);
-    const json = (await res.json()) as { code: string; details: { role: string | null } };
-    expect(json.code).toBe('not_admin');
-    expect(json.details.role).toBe('user');
-  });
-
-  it('403 not_admin when /me omits role entirely', async () => {
-    stubMe({ role: null });
-    const { app } = await import('../index.js');
-    const res = await app.request('/account/settings', { headers: AUTH_HEADER });
-    expect(res.status).toBe(403);
-    const json = (await res.json()) as { code: string; details: { role: string | null } };
-    expect(json.code).toBe('not_admin');
-    expect(json.details.role).toBeNull();
-  });
-
-  it('403 not_admin blocks push too (not only reads)', async () => {
-    stubMe({ role: 'viewer' });
-    const { app } = await import('../index.js');
-    const res = await app.request('/account/settings/957', {
-      method: 'POST',
-      headers: AUTH_HEADER,
-      body: JSON.stringify({ settings_blob: { a: 1 } })
-    });
-    expect(res.status).toBe(403);
+    expect(res.status).not.toBe(403);
   });
 
   it('falls back to account_id when /me omits user_uid', async () => {
@@ -530,7 +508,6 @@ describe('settings handlers', () => {
           JSON.stringify({
             firstname: 'Pierre',
             account_id: 2584,
-            role: 'admin', // admin so the request isn't 403'd by requireAdmin
             accounts: [
               { account_id: 2584, company: 'Acme', api_host: 'https://api-42.grand-shooting.com' }
             ]
