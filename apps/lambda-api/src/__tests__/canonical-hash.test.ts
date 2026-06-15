@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { canonicalize, canonicalHash, canonicalByteLength } from '../lib/canonical-hash.js';
 
 interface Case {
@@ -11,10 +11,11 @@ interface Case {
   sha256_hex: string;
 }
 
-const fixturesPath = resolve(
-  // The test runs from the repo root via vitest's default cwd.
-  process.cwd(),
-  'docs/canonical-hash-fixtures.json'
+// Resolve relative to this test file (not process.cwd()), so the suite works
+// whether vitest runs from the repo root (CI) or scoped to the package.
+// __tests__ → src → lambda-api → apps → repo root, then docs/…
+const fixturesPath = fileURLToPath(
+  new URL('../../../../docs/canonical-hash-fixtures.json', import.meta.url)
 );
 const fixtures = JSON.parse(readFileSync(fixturesPath, 'utf8')) as { cases: Case[] };
 

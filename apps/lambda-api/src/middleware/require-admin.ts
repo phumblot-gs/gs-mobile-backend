@@ -4,6 +4,11 @@ import { requireIdentity, type ResolvedIdentity } from './identity.js';
 /**
  * Reject any settings request whose caller is not a GS admin.
  *
+ * ⚠️ CURRENTLY UNUSED — not wired up in `index.ts`. GS `GET /v3/account/me`
+ * does not expose a `role` field (verified live 2026-06-16), so `identity.role`
+ * is always undefined and this gate 403'd every caller, admins included. Kept
+ * for easy re-enable once GS surfaces a role on /me. See docs/SETTINGS-SYNC.md.
+ *
  * Must run AFTER `identityMiddleware` so `c.var.identity` is populated.
  *
  * Response: 403 with a stable `code: "not_admin"` so clients can branch
