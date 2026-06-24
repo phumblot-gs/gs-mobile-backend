@@ -193,6 +193,7 @@ function stubMe(opts: {
   userUid?: number;
   firstname?: string;
   email?: string;
+  company?: string;
   role?: string | null; // GS does not send `role`; omitted by default. Kept for legacy callers.
   accounts?: Array<{ account_id: number; company: string }>;
   status?: number;
@@ -209,6 +210,7 @@ function stubMe(opts: {
           firstname: opts.firstname ?? 'Paul H.',
           email: opts.email ?? 'paul@grand-shooting.com',
           account_id: opts.accountId ?? 16,
+          ...(opts.company !== undefined ? { company: opts.company } : {}),
           user_uid: opts.userUid ?? 8836,
           ...(role !== undefined ? { role } : {}),
           accounts: opts.accounts ?? [
@@ -403,6 +405,38 @@ describe('settings handlers', () => {
       body: JSON.stringify({ settings_blob: { a: 1 } })
     });
     expect(res.status).toBe(403);
+  });
+
+  it('allows the user main account even when absent from accounts[]', async () => {
+    // GS /v3/account/me exposes the main account as the root `account_id` and
+    // does NOT repeat it in `accounts[]` (which lists only delegated accounts).
+    // The access check must still accept it. Regression for the 403-on-own-
+    // account bug.
+    stubMe({
+      accountId: 2584,
+      firstname: 'Pierre',
+      company: 'Warsaw Studios',
+      accounts: [
+        { account_id: 169, company: 'A' },
+        { account_id: 736, company: 'B' },
+        { account_id: 2643, company: 'C' }
+      ]
+    });
+    const { app } = await import('../index.js');
+    nextUlid = (() => () => '01HVFFFFFFFFFFFFFFFFFFFF00')();
+
+    const push = await app.request('/account/settings/2584', {
+      method: 'POST',
+      headers: AUTH_HEADER,
+      body: JSON.stringify({ settings_blob: { a: 1 } })
+    });
+    expect(push.status).toBe(200);
+    const ptr = (await push.json()) as { active_account_name: string | null };
+    // Name resolves from the root `company`, not from accounts[].
+    expect(ptr.active_account_name).toBe('Warsaw Studios');
+
+    const get = await app.request('/account/settings/2584', { headers: AUTH_HEADER });
+    expect(get.status).toBe(200);
   });
 
   it('GET unknown active_account_id returns 404', async () => {

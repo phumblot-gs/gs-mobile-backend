@@ -11,6 +11,7 @@ import { getSecretOrEnv } from '../lib/secrets.js';
 
 export interface ResolvedIdentity {
   mainAccountId: number;
+  mainAccountName?: string;
   userUid: number;
   userName: string;
   email?: string;
@@ -107,6 +108,7 @@ export const identityMiddleware: MiddlewareHandler = async (c, next) => {
 
   const resolved: ResolvedIdentity = {
     mainAccountId: ident.account_id,
+    mainAccountName: ident.company,
     userUid,
     userName: ident.user_name ?? '',
     email: ident.email,
