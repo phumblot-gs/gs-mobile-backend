@@ -48,7 +48,13 @@ function parseActiveAccountId(c: Context): number {
 }
 
 function ensureAccessibleAccount(identity: ResolvedIdentity, activeAccountId: number): void {
-  const ok = identity.accounts.some((a) => a.account_id === activeAccountId);
+  // The user's main account is exposed as the root `account_id` in GS
+  // /v3/account/me and is NOT repeated in `accounts[]` (which lists only the
+  // other / delegated accounts). So the authorized set is the main account
+  // plus every account in `accounts[]`.
+  const ok =
+    activeAccountId === identity.mainAccountId ||
+    identity.accounts.some((a) => a.account_id === activeAccountId);
   if (!ok) {
     throw new ForbiddenError(
       `User has no access to active_account_id ${activeAccountId}`
@@ -61,7 +67,11 @@ function pointerWireShape(
   identity: ResolvedIdentity,
   version?: AccountSettingsVersionRecord | null
 ): SettingsPointer {
-  const name = identity.accounts.find((a) => a.account_id === rec.active_account_id)?.company ?? null;
+  // The main account isn't listed in `accounts[]` — its company name lives at
+  // the root of /me, carried on the identity as `mainAccountName`.
+  const name =
+    identity.accounts.find((a) => a.account_id === rec.active_account_id)?.company ??
+    (rec.active_account_id === identity.mainAccountId ? identity.mainAccountName ?? null : null);
   const out: SettingsPointer = {
     main_account_id: rec.main_account_id,
     active_account_id: rec.active_account_id,
