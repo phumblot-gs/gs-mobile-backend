@@ -3,6 +3,7 @@ import { GSMeResponseZ, type GSMeResponse } from '@gs-mobile-backend/core';
 export interface Identity {
   email?: string;
   account_id?: number;
+  company?: string;
   user_uid?: number;
   user_name?: string;
   accounts?: Array<{ account_id: number; company: string }>;
@@ -96,6 +97,7 @@ export function meToIdentity(me: GSMeResponse): Identity {
   return {
     email: me.email,
     account_id: me.account_id,
+    company: me.company,
     user_uid: me.user_uid,
     user_name: me.firstname,
     accounts: me.accounts
