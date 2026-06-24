@@ -1,12 +1,11 @@
 name: Deploy Production
 
-# Manual-only until AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY are configured
-# as repository secrets and the Terraform state backend is bootstrapped.
-# Once those are in place, re-enable the push trigger.
+# Auto-deploys on every push to `production` — i.e. when a staging → production
+# PR is merged. `workflow_dispatch` is kept for manual re-runs and rollbacks.
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [production]
+  push:
+    branches: [production]
 
 env:
   AWS_REGION: eu-west-1
