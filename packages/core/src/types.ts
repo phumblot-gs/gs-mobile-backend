@@ -4,9 +4,12 @@ import { z } from 'zod';
 // OAuth
 // =============================================================================
 
-// Mobile client platform initiating the OAuth dance. Defaults to `ios` on the
-// server when the query param is missing — existing iOS clients don't send it.
-export const PlatformZ = z.enum(['ios', 'android']);
+// Client platform initiating the OAuth dance. Defaults to `ios` on the server when
+// the query param is missing — existing iOS clients don't send it. `web` is a
+// browser front (e.g. gs-dashboard): it must also send `return_to`, whose origin
+// has to be in WEB_ALLOWED_RETURN_ORIGINS; the browser comes back there instead
+// of to a deep link.
+export const PlatformZ = z.enum(['ios', 'android', 'web']);
 export type Platform = z.infer<typeof PlatformZ>;
 
 export const OAuthTokenResponseZ = z.object({
@@ -128,6 +131,8 @@ export type PackshotResponse = z.infer<typeof PackshotResponseZ>;
 export interface OAuthStateRecord {
   state: string;
   platform?: Platform;
+  /** `web` only: where the browser goes back to (already validated against the allowed origins). */
+  return_to?: string;
   expires_at: number; // epoch seconds, used as TTL attr
   created_at: number;
 }

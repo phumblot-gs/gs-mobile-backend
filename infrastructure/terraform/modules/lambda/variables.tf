@@ -143,3 +143,9 @@ variable "mobile_deep_link_scheme" {
   type        = string
   default     = "gsmobile"
 }
+
+variable "web_allowed_return_origins" {
+  description = "Comma-separated origins of the browser fronts allowed to sign in with platform=web (e.g. https://dashboard.grand-shooting.com). Empty disables the web platform."
+  type        = string
+  default     = ""
+}

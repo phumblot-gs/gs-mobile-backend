@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { randomBytes } from 'node:crypto';
 import { BadRequestError, PlatformZ, type Platform } from '@gs-mobile-backend/core';
-import { getConfig, getOAuthRedirectUri } from '../lib/config.js';
+import { getConfig, getOAuthRedirectUri, validateWebReturnTo } from '../lib/config.js';
 import { putOAuthState } from '../lib/dynamo.js';
 import { getSecretOrEnv } from '../lib/secrets.js';
 
@@ -35,8 +35,19 @@ export async function authStart(c: Context): Promise<Response> {
     platform = parsed.data;
   }
 
+  // A web front says where the browser must come back to; only allow-listed origins qualify (otherwise the session id
+  // could be handed to any site).
+  let returnTo: string | undefined;
+  if (platform === 'web') {
+    const validated = validateWebReturnTo(c.req.query('return_to'), cfg);
+    if (!validated) {
+      throw new BadRequestError('platform=web needs a return_to whose origin is allowed');
+    }
+    returnTo = validated;
+  }
+
   const state = randomBytes(32).toString('hex');
-  await putOAuthState(state, platform);
+  await putOAuthState(state, platform, returnTo);
 
   const [clientId, baseUrl] = await Promise.all([
     getSecretOrEnv(cfg.GS_OAUTH_CLIENT_ID, cfg.SECRET_GS_OAUTH_CLIENT_ID),
