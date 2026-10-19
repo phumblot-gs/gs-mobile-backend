@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 // Stub AWS + secrets BEFORE importing the app.
 vi.mock('../lib/dynamo.js', () => {
-  type Platform = 'ios' | 'android';
+  type Platform = 'ios' | 'android' | 'web';
   type Account = { account_id: number; company: string };
   type Session = {
     session_id: string;
@@ -19,11 +19,11 @@ vi.mock('../lib/dynamo.js', () => {
     expires_at: number;
     created_at: number;
   };
-  const states = new Map<string, { state: string; platform?: Platform; expires_at: number; created_at: number }>();
+  const states = new Map<string, { state: string; platform?: Platform; return_to?: string; expires_at: number; created_at: number }>();
   const sessions = new Map<string, Session>();
   return {
-    putOAuthState: vi.fn(async (state: string, platform?: Platform) => {
-      states.set(state, { state, platform, expires_at: Date.now() / 1000 + 300, created_at: Date.now() / 1000 });
+    putOAuthState: vi.fn(async (state: string, platform?: Platform, returnTo?: string) => {
+      states.set(state, { state, platform, return_to: returnTo, expires_at: Date.now() / 1000 + 300, created_at: Date.now() / 1000 });
     }),
     consumeOAuthState: vi.fn(async (state: string) => {
       const v = states.get(state);
@@ -73,7 +73,8 @@ const baseEnv = {
   SECRET_AUTORETOUCH_API_KEY: 'gs-mobile/dev/ar',
   GS_OAUTH_CLIENT_ID: 'test-client-id',
   GS_OAUTH_CLIENT_SECRET: 'test-client-secret',
-  GS_OAUTH_BASE_URL: 'https://api.grand-shooting.com'
+  GS_OAUTH_BASE_URL: 'https://api.grand-shooting.com',
+  WEB_ALLOWED_RETURN_ORIGINS: 'https://dashboard.grand-shooting.com, http://127.0.0.1:5173/'
 };
 
 beforeEach(() => {
@@ -315,6 +316,84 @@ describe('auth handlers', () => {
     expect(json.account_id).toBe(957);
     expect(json.user_uid).toBe(7777);
     expect(json).not.toHaveProperty('platform');
+  });
+
+  it('GET /auth/start with platform=web needs a return_to on an allowed origin', async () => {
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    const { app } = await import('../index.js');
+    const enc = encodeURIComponent;
+    for (const bad of [
+      '/auth/start?platform=web', // no return_to
+      `/auth/start?platform=web&return_to=${enc('https://evil.example/auth/done')}`, // origin not allowed
+      `/auth/start?platform=web&return_to=${enc('https://dashboard.grand-shooting.com.evil.example/x')}`, // look-alike host
+      `/auth/start?platform=web&return_to=${enc('javascript:alert(1)')}`,
+      `/auth/start?platform=web&return_to=${enc('https://user:pw@dashboard.grand-shooting.com/auth/done')}`, // credentials in the URL
+      `/auth/start?platform=web&return_to=${enc('http://dashboard.grand-shooting.com/auth/done')}` // wrong scheme for that origin
+    ]) {
+      const res = await app.request(bad);
+      expect(res.status, bad).toBe(400);
+    }
+    // an allowed origin works (the allow-list entry with a trailing slash too)
+    const ok = await app.request(`/auth/start?platform=web&return_to=${enc('http://127.0.0.1:5173/auth/done')}`);
+    expect(ok.status).toBe(302);
+  });
+
+  it('end-to-end with platform=web: the browser comes back to its return_to with the session id, exchange works', async () => {
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    const dynamo = await import('../lib/dynamo.js');
+    const { app } = await import('../index.js');
+
+    const returnTo = 'https://dashboard.grand-shooting.com/auth/done?lang=fr';
+    const startRes = await app.request(`/auth/start?platform=web&return_to=${encodeURIComponent(returnTo)}`);
+    expect(startRes.status).toBe(302);
+    const stateValue = new URL(startRes.headers.get('location')!).searchParams.get('state')!;
+    const rec = (dynamo as unknown as { __states: Map<string, { platform?: string; return_to?: string }> }).__states.get(stateValue);
+    expect(rec?.platform).toBe('web');
+    expect(rec?.return_to).toBe(returnTo);
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = typeof input === 'string' ? input : (input as Request | URL).toString();
+      if (url.includes('/oauth/default/token')) {
+        return new Response(JSON.stringify({ access_token: 'w-tok', refresh_token: 'w-ref', token_type: 'bearer', expires_in: 3600 }), {
+          status: 200, headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (url.endsWith('/account/me')) {
+        return new Response(JSON.stringify({ firstname: 'Web', email: 'web@example.com', account_id: 19, user_uid: 4242, accounts: [{ account_id: 19, company: 'Studio' }, { account_id: 34, company: 'Brand' }] }), {
+          status: 200, headers: { 'content-type': 'application/json' }
+        });
+      }
+      return new Response('not stubbed', { status: 500 });
+    });
+
+    const cb = await app.request(`/auth/callback?code=THECODE&state=${stateValue}`);
+    expect(cb.status).toBe(302);
+    const loc = new URL(cb.headers.get('location')!);
+    expect(loc.origin + loc.pathname).toBe('https://dashboard.grand-shooting.com/auth/done');
+    expect(loc.searchParams.get('lang')).toBe('fr'); // the front's own query survives
+    const sessionId = loc.searchParams.get('session_id')!;
+    expect(sessionId).toMatch(/^[a-f0-9]{64}$/);
+
+    const ex = await app.request('/auth/exchange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session_id: sessionId }) });
+    expect(ex.status).toBe(200);
+    const json = (await ex.json()) as Record<string, unknown>;
+    expect(json.access_token).toBe('w-tok');
+    expect(json.refresh_token).toBe('w-ref');
+    expect(json.accounts).toEqual([{ account_id: 19, company: 'Studio' }, { account_id: 34, company: 'Brand' }]);
+    // one-shot: a second exchange of the same session is refused
+    const again = await app.request('/auth/exchange', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ session_id: sessionId }) });
+    expect(again.status).toBe(401);
+  });
+
+  it('web is disabled when no origin is configured', async () => {
+    process.env.WEB_ALLOWED_RETURN_ORIGINS = '';
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    const { app } = await import('../index.js');
+    const res = await app.request(`/auth/start?platform=web&return_to=${encodeURIComponent('https://dashboard.grand-shooting.com/auth/done')}`);
+    expect(res.status).toBe(400);
   });
 
   it('GET /auth/callback still succeeds when /me lookup fails', async () => {
