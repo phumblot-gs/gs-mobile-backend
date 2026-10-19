@@ -31,9 +31,9 @@ variable "mobile_deep_link_scheme" {
 }
 
 variable "web_allowed_return_origins" {
-  description = "Origins of the browser fronts allowed to use platform=web. Staging also lists the local dev server of gs-dashboard; add the staging dashboard origin in terraform.tfvars."
+  description = "Origins of the browser fronts allowed to use platform=web: the staging gs-dashboard and its local dev server."
   type        = string
-  default     = "http://localhost:5173,http://127.0.0.1:5173"
+  default     = "https://dashboard-staging.grand-shooting.com,http://localhost:5173,http://127.0.0.1:5173"
 }
 
 variable "uploads_retention_days" {

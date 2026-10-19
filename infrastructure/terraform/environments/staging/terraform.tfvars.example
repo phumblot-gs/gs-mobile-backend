@@ -7,7 +7,7 @@
 # domain_name      = "api-staging.mobile.grand-shooting.com"
 # public_base_url  = "https://api-staging.mobile.grand-shooting.com"
 # mobile_deep_link_scheme = "gsmobile"
-# web_allowed_return_origins = "http://localhost:5173,http://127.0.0.1:5173,https://<staging dashboard origin>"
+# web_allowed_return_origins = "https://dashboard-staging.grand-shooting.com,http://localhost:5173,http://127.0.0.1:5173"
 
 # lambda_memory_size = 512
 # lambda_timeout     = 30
