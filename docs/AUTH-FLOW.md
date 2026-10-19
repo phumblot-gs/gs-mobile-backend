@@ -52,6 +52,17 @@ The lookup is best-effort: if it fails (404, network error, malformed body)
 the sign-in still completes — `email` is simply omitted. The iOS client
 treats it as optional and falls back to "non-staff" gating in that case.
 
+## Web fronts (`platform=web`)
+
+A browser front such as `gs-dashboard` uses the same backend and the same GS plugin credentials; only the way back differs.
+`GET /auth/start?platform=web&return_to=<url>` — `return_to` is the front's page that receives the result (for example
+`https://dashboard.grand-shooting.com/auth/done`). Its **origin must be listed in `WEB_ALLOWED_RETURN_ORIGINS`** (comma-separated;
+empty disables the web platform), otherwise `/auth/start` answers 400: that list is what stops a session id from being handed to
+any site. After the GS login the callback redirects the browser to `return_to` with `?session_id=<hex>` appended (instead of the
+`gsmobile://` deep link); the front then calls `POST /auth/exchange { session_id }` from the browser (CORS is open on the auth
+endpoints) and `POST /auth/refresh` when the access token expires. The session id is one-shot and lives 60 seconds, as for
+mobile. The tokens are used against the GS API with `Authorization: access_token <token>`.
+
 ## Refresh
 
 ```mermaid

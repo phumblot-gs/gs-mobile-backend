@@ -21,6 +21,9 @@ const EnvSchema = z.object({
   // Public-facing URL used to compute redirect_uri
   PUBLIC_BASE_URL: z.string().url(),
   MOBILE_DEEP_LINK_SCHEME: z.string().default('gsmobile'),
+  // Browser fronts allowed to use `platform=web`: comma-separated origins (scheme://host[:port]).
+  // Empty = the web platform is disabled. Only these origins can receive a session id.
+  WEB_ALLOWED_RETURN_ORIGINS: z.string().default(''),
 
   // Secrets Manager secret IDs
   SECRET_GS_OAUTH_CLIENT_ID: z.string().min(1),
@@ -61,6 +64,36 @@ export function resetConfigCache(): void {
 /** Convenience: callback URL exposed to GS during the OAuth dance. */
 export function getOAuthRedirectUri(cfg = getConfig()): string {
   return `${cfg.PUBLIC_BASE_URL.replace(/\/$/, '')}/auth/callback`;
+}
+
+/** Parses WEB_ALLOWED_RETURN_ORIGINS. */
+export function getWebAllowedOrigins(cfg = getConfig()): string[] {
+  return cfg.WEB_ALLOWED_RETURN_ORIGINS.split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
+}
+
+/**
+ * Validates a `return_to` URL of a web front: http(s), no credentials, and an origin that is explicitly allowed.
+ * Returns the normalised URL, or null.
+ */
+export function validateWebReturnTo(raw: string | undefined, cfg = getConfig()): string | null {
+  if (!raw) return null;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if ((u.protocol !== 'https:' && u.protocol !== 'http:') || u.username || u.password) return null;
+  if (!getWebAllowedOrigins(cfg).includes(u.origin)) return null;
+  u.hash = '';
+  return u.toString();
+}
+
+/** Where a web front gets the session id: its own `return_to` with `?session_id=…`. */
+export function getWebReturnUrl(returnTo: string, sessionId: string): string {
+  const u = new URL(returnTo);
+  u.searchParams.set('session_id', sessionId);
+  return u.toString();
 }
 
 /** Convenience: deep-link the mobile app uses to receive the session id. */

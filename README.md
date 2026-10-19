@@ -195,6 +195,7 @@ See `apps/lambda-api/src/lib/config.ts` for the Zod schema. Required:
 | `S3_PACKSHOTS_BUCKET`            | packshots bucket name                  |
 | `PUBLIC_BASE_URL`                | e.g. `https://api.mobile.grand-shooting.com` |
 | `MOBILE_DEEP_LINK_SCHEME`        | shared iOS/Android scheme (default `gsmobile`) |
+| `WEB_ALLOWED_RETURN_ORIGINS`     | origins of browser fronts allowed to sign in with `platform=web` (comma-separated, default empty = disabled) |
 | `SECRET_GS_OAUTH_CLIENT_ID`      | Secrets Manager secret ID              |
 | `SECRET_GS_OAUTH_CLIENT_SECRET`  | Secrets Manager secret ID              |
 | `SECRET_GS_OAUTH_BASE_URL`       | Secrets Manager secret ID              |

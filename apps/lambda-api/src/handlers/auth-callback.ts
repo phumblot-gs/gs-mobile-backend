@@ -6,7 +6,7 @@ import {
   UnauthorizedError,
   UpstreamError
 } from '@gs-mobile-backend/core';
-import { getConfig, getMobileDeepLink, getOAuthRedirectUri } from '../lib/config.js';
+import { getConfig, getMobileDeepLink, getOAuthRedirectUri, getWebReturnUrl } from '../lib/config.js';
 import { consumeOAuthState, putOAuthSession } from '../lib/dynamo.js';
 import { getSecretOrEnv } from '../lib/secrets.js';
 import { fetchMe, redactEmail } from '../lib/gs-me.js';
@@ -24,7 +24,8 @@ const CallbackQueryZ = z.object({
  * Receives the redirect from Grand Shooting. Validates state, exchanges the
  * authorization code for tokens (server-to-server with client_secret), stores
  * the tokens behind a one-shot session id, and bounces the user back into the
- * iOS app via the `gsmobile://auth/done?session_id=...` deep link.
+ * iOS app via the `gsmobile://auth/done?session_id=...` deep link (Android: same;
+ * web fronts: back to their allow-listed `return_to` with `?session_id=...`).
  */
 export async function authCallback(c: Context): Promise<Response> {
   const cfg = getConfig();
@@ -103,5 +104,8 @@ export async function authCallback(c: Context): Promise<Response> {
     platform
   });
 
+  if (platform === 'web' && stateRecord.return_to) {
+    return c.redirect(getWebReturnUrl(stateRecord.return_to, sessionId), 302);
+  }
   return c.redirect(getMobileDeepLink(sessionId, cfg), 302);
 }

@@ -56,6 +56,8 @@ module "lambda" {
 
   public_base_url         = var.public_base_url
   mobile_deep_link_scheme = var.mobile_deep_link_scheme
+
+  web_allowed_return_origins = var.web_allowed_return_origins
 }
 
 module "api_gateway" {
