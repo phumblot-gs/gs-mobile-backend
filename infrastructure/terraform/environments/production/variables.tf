@@ -29,6 +29,12 @@ variable "mobile_deep_link_scheme" {
   default = "gsmobile"
 }
 
+variable "web_allowed_return_origins" {
+  description = "Origins of the browser fronts allowed to use platform=web."
+  type        = string
+  default     = "https://dashboard.grand-shooting.com"
+}
+
 variable "uploads_retention_days" {
   type    = number
   default = 7

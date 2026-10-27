@@ -31,6 +31,7 @@ resource "aws_lambda_function" "api" {
       S3_PACKSHOTS_BUCKET                      = var.s3_packshots_bucket_name
       PUBLIC_BASE_URL                          = var.public_base_url
       MOBILE_DEEP_LINK_SCHEME                  = var.mobile_deep_link_scheme
+      WEB_ALLOWED_RETURN_ORIGINS               = var.web_allowed_return_origins
       SECRET_GS_OAUTH_CLIENT_ID                = var.secret_gs_oauth_client_id_name
       SECRET_GS_OAUTH_CLIENT_SECRET            = var.secret_gs_oauth_client_secret_name
       SECRET_GS_OAUTH_BASE_URL                 = var.secret_gs_oauth_base_url_name

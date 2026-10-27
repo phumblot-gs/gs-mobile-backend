@@ -25,11 +25,12 @@ function doc(): DynamoDBDocumentClient {
 
 const STATE_TTL_SECONDS = 5 * 60;
 
-export async function putOAuthState(state: string, platform?: Platform): Promise<void> {
+export async function putOAuthState(state: string, platform?: Platform, returnTo?: string): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const record: OAuthStateRecord = {
     state,
     platform,
+    return_to: returnTo,
     created_at: now,
     expires_at: now + STATE_TTL_SECONDS
   };

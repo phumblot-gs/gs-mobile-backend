@@ -7,6 +7,7 @@
 # domain_name      = "api.mobile.grand-shooting.com"
 # public_base_url  = "https://api.mobile.grand-shooting.com"
 # mobile_deep_link_scheme = "gsmobile"
+# web_allowed_return_origins = "https://dashboard.grand-shooting.com"
 
 # lambda_memory_size = 1024
 # lambda_timeout     = 30
