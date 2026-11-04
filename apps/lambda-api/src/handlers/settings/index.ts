@@ -95,13 +95,13 @@ function pointerWireShape(
 // ===========================================================================
 export async function listAllSettings(c: SettingsContext): Promise<Response> {
   const identity = requireIdentity(c);
-  const pointers = await listPointers(identity.mainAccountId);
+  const pointers = await listPointers(identity.env, identity.mainAccountId);
 
   // We need the current version's hash for each pointer (metadata-only,
   // no blob). Batch by querying current versions in parallel.
   const items = await Promise.all(
     pointers.map(async (p) => {
-      const v = await getVersion(p.main_account_id, p.active_account_id, p.current_version_id);
+      const v = await getVersion(identity.env, p.main_account_id, p.active_account_id, p.current_version_id);
       return pointerWireShape(p, identity, v);
     })
   );
@@ -117,11 +117,11 @@ export async function getSettings(c: SettingsContext): Promise<Response> {
   const activeId = parseActiveAccountId(c);
   ensureAccessibleAccount(identity, activeId);
 
-  const pointer = await getPointer(identity.mainAccountId, activeId);
+  const pointer = await getPointer(identity.env, identity.mainAccountId, activeId);
   if (!pointer) {
     throw new NotFoundError('No settings for this account pair');
   }
-  const version = await getVersion(identity.mainAccountId, activeId, pointer.current_version_id);
+  const version = await getVersion(identity.env, identity.mainAccountId, activeId, pointer.current_version_id);
   if (!version) {
     // Pointer exists without a version row — data inconsistency. Treat
     // as 404 from the client's perspective.
@@ -162,9 +162,10 @@ export async function postSettings(c: SettingsContext): Promise<Response> {
 
   // No-op detection: if there's already a current pointer with the same hash,
   // do nothing and return the existing pointer.
-  const existing = await getPointer(identity.mainAccountId, activeId);
+  const existing = await getPointer(identity.env, identity.mainAccountId, activeId);
   if (existing) {
     const currentVersion = await getVersion(
+      identity.env,
       identity.mainAccountId,
       activeId,
       existing.current_version_id
@@ -175,6 +176,7 @@ export async function postSettings(c: SettingsContext): Promise<Response> {
   }
 
   const newPointer = await pushVersion({
+    env: identity.env,
     mainAccountId: identity.mainAccountId,
     activeAccountId: activeId,
     settingsBlob: canonical,
@@ -185,6 +187,7 @@ export async function postSettings(c: SettingsContext): Promise<Response> {
   });
 
   const newVersion = await getVersion(
+    identity.env,
     identity.mainAccountId,
     activeId,
     newPointer.current_version_id
@@ -200,8 +203,8 @@ export async function listHistory(c: SettingsContext): Promise<Response> {
   const activeId = parseActiveAccountId(c);
   ensureAccessibleAccount(identity, activeId);
 
-  const pointer = await getPointer(identity.mainAccountId, activeId);
-  const versions = await queryAllVersions(identity.mainAccountId, activeId);
+  const pointer = await getPointer(identity.env, identity.mainAccountId, activeId);
+  const versions = await queryAllVersions(identity.env, identity.mainAccountId, activeId);
   const items: HistoryItem[] = versions
     .filter((v) => v.deleted_at === null)
     .map((v) => ({
@@ -224,11 +227,11 @@ export async function getHistoryVersion(c: SettingsContext): Promise<Response> {
   ensureAccessibleAccount(identity, activeId);
   const versionId = c.req.param('version_id')!;
 
-  const version = await getVersion(identity.mainAccountId, activeId, versionId);
+  const version = await getVersion(identity.env, identity.mainAccountId, activeId, versionId);
   if (!version || version.deleted_at !== null) {
     throw new NotFoundError(`Version ${versionId} not found`);
   }
-  const pointer = await getPointer(identity.mainAccountId, activeId);
+  const pointer = await getPointer(identity.env, identity.mainAccountId, activeId);
   const detail: HistoryVersionDetail = {
     version_id: version.version_id,
     main_account_id: version.main_account_id,
@@ -252,17 +255,18 @@ export async function restoreHistoryVersion(c: SettingsContext): Promise<Respons
   ensureAccessibleAccount(identity, activeId);
   const versionId = c.req.param('version_id')!;
 
-  const version = await getVersion(identity.mainAccountId, activeId, versionId);
+  const version = await getVersion(identity.env, identity.mainAccountId, activeId, versionId);
   if (!version || version.deleted_at !== null) {
     throw new NotFoundError(`Version ${versionId} not found`);
   }
 
-  const pointer = await getPointer(identity.mainAccountId, activeId);
+  const pointer = await getPointer(identity.env, identity.mainAccountId, activeId);
   if (pointer?.current_version_id === versionId) {
     throw new ConflictError('Version is already current');
   }
 
   const newPointer = await restorePointer({
+    env: identity.env,
     mainAccountId: identity.mainAccountId,
     activeAccountId: activeId,
     versionId,
@@ -282,16 +286,17 @@ export async function deleteHistoryVersion(c: SettingsContext): Promise<Response
   ensureAccessibleAccount(identity, activeId);
   const versionId = c.req.param('version_id')!;
 
-  const version = await getVersion(identity.mainAccountId, activeId, versionId);
+  const version = await getVersion(identity.env, identity.mainAccountId, activeId, versionId);
   if (!version || version.deleted_at !== null) {
     throw new NotFoundError(`Version ${versionId} not found`);
   }
-  const pointer = await getPointer(identity.mainAccountId, activeId);
+  const pointer = await getPointer(identity.env, identity.mainAccountId, activeId);
   if (pointer?.current_version_id === versionId) {
     throw new ConflictError('Cannot delete the current version');
   }
 
   await softDeleteVersion({
+    env: identity.env,
     mainAccountId: identity.mainAccountId,
     activeAccountId: activeId,
     versionId,

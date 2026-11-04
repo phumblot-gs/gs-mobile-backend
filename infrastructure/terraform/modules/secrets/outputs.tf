@@ -38,6 +38,14 @@ output "autoretouch_api_key_arn" {
   value = aws_secretsmanager_secret.autoretouch_api_key.arn
 }
 
+output "gs_instances_name" {
+  value = aws_secretsmanager_secret.gs_instances.name
+}
+
+output "gs_instances_arn" {
+  value = aws_secretsmanager_secret.gs_instances.arn
+}
+
 output "all_secret_arns" {
   description = "All secret ARNs (for IAM policy)"
   value = [
@@ -45,6 +53,7 @@ output "all_secret_arns" {
     aws_secretsmanager_secret.gs_oauth_client_secret.arn,
     aws_secretsmanager_secret.gs_oauth_base_url.arn,
     aws_secretsmanager_secret.photoroom_api_key.arn,
-    aws_secretsmanager_secret.autoretouch_api_key.arn
+    aws_secretsmanager_secret.autoretouch_api_key.arn,
+    aws_secretsmanager_secret.gs_instances.arn
   ]
 }

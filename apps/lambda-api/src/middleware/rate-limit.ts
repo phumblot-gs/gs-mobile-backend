@@ -1,6 +1,16 @@
 import type { MiddlewareHandler } from 'hono';
 import { consumeRateLimit } from '../lib/rate-limit-dynamo.js';
 import { requireIdentity, type ResolvedIdentity } from './identity.js';
+import { SHARED_ENV } from '../lib/gs-instances.js';
+
+/**
+ * Bucket keys are partitioned by GS instance: account ids are only unique
+ * within an instance. `shared` keeps the historical keys (`pull#16`), other
+ * instances are prefixed (`gl#pull#16`). Exported for tests.
+ */
+export function bucketKey(env: string, key: string): string {
+  return env === SHARED_ENV ? key : `${env}#${key}`;
+}
 
 /**
  * Pull rate limit: 30 requests / minute per user_uid (cap is global per
@@ -9,7 +19,7 @@ import { requireIdentity, type ResolvedIdentity } from './identity.js';
 export const pullRateLimit: MiddlewareHandler = async (c, next) => {
   const identity = requireIdentity(c as unknown as { var: { identity?: ResolvedIdentity } });
   const result = await consumeRateLimit({
-    bucketKey: `pull#${identity.userUid}`,
+    bucketKey: bucketKey(identity.env, `pull#${identity.userUid}`),
     windowSeconds: 60,
     limit: 30
   });
@@ -33,7 +43,7 @@ export const pushRateLimit: MiddlewareHandler = async (c, next) => {
     return;
   }
   const result = await consumeRateLimit({
-    bucketKey: `push#${identity.mainAccountId}#${activeId}`,
+    bucketKey: bucketKey(identity.env, `push#${identity.mainAccountId}#${activeId}`),
     windowSeconds: 5,
     limit: 1
   });

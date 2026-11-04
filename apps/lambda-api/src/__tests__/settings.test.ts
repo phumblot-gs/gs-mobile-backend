@@ -32,8 +32,11 @@ type VersionRecord = {
 
 const pointers = new Map<string, PointerRecord>();
 const versions = new Map<string, VersionRecord>();
-const pairKey = (m: number, a: number) => `${m}#${a}`;
-const ptrKey = (m: number, a: number) => `${m}#${a}`;
+// Mirrors the real partitioning: shared keeps "<main>#<active>", dedicated
+// instances are prefixed "<env>#<main>#<active>".
+const pairKey = (env: string, m: number, a: number) =>
+  env === 'shared' ? `${m}#${a}` : `${env}#${m}#${a}`;
+const ptrKey = (env: string, m: number, a: number) => `${env}|${m}#${a}`;
 const verKey = (pair: string, ulidVal: string) => `${pair}#${ulidVal}`;
 
 let nextUlid: (() => string) | null = null;
@@ -45,19 +48,22 @@ vi.mock('../lib/settings-dynamo.js', async () => {
   return {
     ...real,
     newVersionId: () => (nextUlid ? nextUlid() : ulid()),
-    getPointer: vi.fn(async (m: number, a: number) => pointers.get(ptrKey(m, a)) ?? null),
-    listPointers: vi.fn(async (m: number) =>
-      [...pointers.values()].filter((p) => p.main_account_id === m)
+    getPointer: vi.fn(async (env: string, m: number, a: number) => pointers.get(ptrKey(env, m, a)) ?? null),
+    listPointers: vi.fn(async (env: string, m: number) =>
+      [...pointers.entries()]
+        .filter(([k, p]) => k.startsWith(`${env}|`) && p.main_account_id === m)
+        .map(([, p]) => p)
     ),
-    getVersion: vi.fn(async (m: number, a: number, vid: string) =>
-      versions.get(verKey(pairKey(m, a), vid)) ?? null
+    getVersion: vi.fn(async (env: string, m: number, a: number, vid: string) =>
+      versions.get(verKey(pairKey(env, m, a), vid)) ?? null
     ),
-    queryAllVersions: vi.fn(async (m: number, a: number) =>
+    queryAllVersions: vi.fn(async (env: string, m: number, a: number) =>
       [...versions.values()]
-        .filter((v) => v.account_pair === pairKey(m, a))
+        .filter((v) => v.account_pair === pairKey(env, m, a))
         .sort((x, y) => (x.version_id < y.version_id ? 1 : -1))
     ),
     pushVersion: vi.fn(async (args: {
+      env: string;
       mainAccountId: number;
       activeAccountId: number;
       settingsBlob: string;
@@ -67,7 +73,7 @@ vi.mock('../lib/settings-dynamo.js', async () => {
       now: string;
     }) => {
       const vid = nextUlid ? nextUlid() : ulid();
-      const pair = pairKey(args.mainAccountId, args.activeAccountId);
+      const pair = pairKey(args.env, args.mainAccountId, args.activeAccountId);
       const vRec: VersionRecord = {
         account_pair: pair,
         version_id: vid,
@@ -93,10 +99,11 @@ vi.mock('../lib/settings-dynamo.js', async () => {
         last_action: 'push',
         last_restored_from_version_id: null
       };
-      pointers.set(ptrKey(args.mainAccountId, args.activeAccountId), pRec);
+      pointers.set(ptrKey(args.env, args.mainAccountId, args.activeAccountId), pRec);
       return pRec;
     }),
     restorePointer: vi.fn(async (args: {
+      env: string;
       mainAccountId: number;
       activeAccountId: number;
       versionId: string;
@@ -114,10 +121,11 @@ vi.mock('../lib/settings-dynamo.js', async () => {
         last_action: 'restore',
         last_restored_from_version_id: args.versionId
       };
-      pointers.set(ptrKey(args.mainAccountId, args.activeAccountId), pRec);
+      pointers.set(ptrKey(args.env, args.mainAccountId, args.activeAccountId), pRec);
       return pRec;
     }),
     softDeleteVersion: vi.fn(async (args: {
+      env: string;
       mainAccountId: number;
       activeAccountId: number;
       versionId: string;
@@ -125,15 +133,15 @@ vi.mock('../lib/settings-dynamo.js', async () => {
       userName: string;
       now: string;
     }) => {
-      const pair = pairKey(args.mainAccountId, args.activeAccountId);
+      const pair = pairKey(args.env, args.mainAccountId, args.activeAccountId);
       const v = versions.get(verKey(pair, args.versionId));
       if (!v) throw new Error('not found');
       v.deleted_at = args.now;
       v.deleted_by_user_uid = args.userUid;
       v.deleted_by_user_name = args.userName;
     }),
-    putPointer: vi.fn(async (rec: PointerRecord) => {
-      pointers.set(ptrKey(rec.main_account_id, rec.active_account_id), rec);
+    putPointer: vi.fn(async (env: string, rec: PointerRecord) => {
+      pointers.set(ptrKey(env, rec.main_account_id, rec.active_account_id), rec);
     })
   };
 });
@@ -575,5 +583,268 @@ describe('settings handlers', () => {
       (typeof input === 'string' ? input : (input as Request | URL).toString()).endsWith('/me')
     );
     expect(meCalls.length).toBe(1);
+  });
+});
+
+// =============================================================================
+// Multi-instance (X-GS-Env) + auth scheme relay
+// =============================================================================
+
+const GL_REGISTRY = JSON.stringify({
+  gl: {
+    api_base_url: 'https://api-gl.grand-shooting.com',
+    web_base_url: 'https://gl.grand-shooting.com'
+  }
+});
+
+interface MeCall { url: string; authorization: string | null }
+
+/**
+ * /me stub that answers per host, so two instances can return the SAME
+ * account_id (ids are only unique within an instance). Records every call.
+ */
+function stubMePerHost(byHost: Record<string, { accountId: number; company?: string }>): MeCall[] {
+  const calls: MeCall[] = [];
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : (input as Request | URL).toString();
+    const headers = new Headers((init as RequestInit | undefined)?.headers);
+    calls.push({ url, authorization: headers.get('authorization') });
+    const host = new URL(url).host;
+    const who = byHost[host];
+    if (!who || !url.endsWith('/v3/account/me')) {
+      return new Response('not stubbed', { status: 500 });
+    }
+    return new Response(
+      JSON.stringify({
+        firstname: 'Paul',
+        account_id: who.accountId,
+        company: who.company ?? `main-${host}`,
+        accounts: [{ account_id: 957, company: `delegated-${host}` }]
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  });
+  return calls;
+}
+
+const SHARED_HOST = 'api.grand-shooting.com';
+const GL_HOST = 'api-gl.grand-shooting.com';
+
+describe('multi-instance (X-GS-Env)', () => {
+  beforeEach(async () => {
+    process.env.GS_INSTANCES_JSON = GL_REGISTRY;
+    delete process.env.SECRET_GS_INSTANCES;
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    const { _resetInstanceRegistryCache } = await import('../lib/gs-instances.js');
+    _resetInstanceRegistryCache();
+  });
+
+  afterEach(() => {
+    delete process.env.GS_INSTANCES_JSON;
+    delete process.env.SECRET_GS_INSTANCES;
+  });
+
+  it('relays a Bearer API key to GS as Bearer', async () => {
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', {
+      headers: { authorization: 'Bearer my-api-key' }
+    });
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.authorization).toBe('Bearer my-api-key');
+  });
+
+  it('relays an OAuth access_token to GS as access_token', async () => {
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', {
+      headers: { authorization: 'access_token oauth-tok' }
+    });
+    expect(res.status).toBe(200);
+    expect(calls[0]!.authorization).toBe('access_token oauth-tok');
+  });
+
+  it('canonicalises the scheme case (bearer → Bearer)', async () => {
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    await app.request('/account/settings', { headers: { authorization: 'bearer k' } });
+    expect(calls[0]!.authorization).toBe('Bearer k');
+  });
+
+  it('no X-GS-Env → shared host, registry secret never read (back-compat)', async () => {
+    // Registry provisioned through Secrets Manager only: a no-header request
+    // must not even touch it.
+    delete process.env.GS_INSTANCES_JSON;
+    process.env.SECRET_GS_INSTANCES = 'gs-mobile/test/gs-instances';
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    const secrets = await import('../lib/secrets.js');
+    vi.mocked(secrets.getSecret).mockClear();
+
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', { headers: AUTH_HEADER });
+    expect(res.status).toBe(200);
+    expect(calls.map((c) => new URL(c.url).host)).toEqual([SHARED_HOST]);
+    expect(secrets.getSecret).not.toHaveBeenCalled();
+  });
+
+  it('explicit X-GS-Env: shared behaves like no header', async () => {
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', {
+      headers: { ...AUTH_HEADER, 'x-gs-env': 'Shared' }
+    });
+    expect(res.status).toBe(200);
+    expect(new URL(calls[0]!.url).host).toBe(SHARED_HOST);
+  });
+
+  it('X-GS-Env: gl → /me on the gl instance api_base_url', async () => {
+    const calls = stubMePerHost({ [GL_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', {
+      headers: { authorization: 'Bearer gl-key', 'x-gs-env': 'gl' }
+    });
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://api-gl.grand-shooting.com/v3/account/me');
+    expect(calls[0]!.authorization).toBe('Bearer gl-key');
+  });
+
+  it.each(['zz', 'https://evil.example.com', '../gl', '__proto__', 'constructor', 'toString'])(
+    'unknown or malformed env %j → 400 unknown_env, GS never called',
+    async (env) => {
+      const calls = stubMePerHost({});
+      const { app } = await import('../index.js');
+      const res = await app.request('/account/settings', {
+        headers: { ...AUTH_HEADER, 'x-gs-env': env }
+      });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { code: string }).code).toBe('unknown_env');
+      expect(calls).toHaveLength(0);
+    }
+  );
+
+  it('unknown env → 400 even without Authorization', async () => {
+    stubMePerHost({});
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', { headers: { 'x-gs-env': 'zz' } });
+    expect(res.status).toBe(400);
+  });
+
+  it('dedicated env when the registry is not provisioned → 400', async () => {
+    delete process.env.GS_INSTANCES_JSON;
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    stubMePerHost({ [GL_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const res = await app.request('/account/settings', {
+      headers: { ...AUTH_HEADER, 'x-gs-env': 'gl' }
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('misconfigured registry → 500 on dedicated env, shared unaffected', async () => {
+    process.env.GS_INSTANCES_JSON = JSON.stringify({ gl: { api_base_url: 'http://api-gl.example.com' } });
+    process.env.ENVIRONMENT = 'staging';
+    const { resetConfigCache } = await import('../lib/config.js');
+    resetConfigCache();
+    stubMePerHost({ [SHARED_HOST]: { accountId: 16 }, [GL_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const gl = await app.request('/account/settings', {
+      headers: { ...AUTH_HEADER, 'x-gs-env': 'gl' }
+    });
+    expect(gl.status).toBe(500);
+    const shared = await app.request('/account/settings', { headers: AUTH_HEADER });
+    expect(shared.status).toBe(200);
+  });
+
+  it('identity cache is partitioned by env (same token, two instances)', async () => {
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 }, [GL_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const shared = { authorization: 'Bearer same-token' };
+    const gl = { authorization: 'Bearer same-token', 'x-gs-env': 'gl' };
+    await app.request('/account/settings', { headers: shared });
+    await app.request('/account/settings', { headers: gl });
+    await app.request('/account/settings', { headers: shared });
+    await app.request('/account/settings', { headers: gl });
+    // One /me per (env, token) — then served from cache.
+    expect(calls.map((c) => new URL(c.url).host).sort()).toEqual([GL_HOST, SHARED_HOST]);
+  });
+
+  it('identity cache is partitioned by scheme', async () => {
+    const calls = stubMePerHost({ [SHARED_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    await app.request('/account/settings', { headers: { authorization: 'Bearer t' } });
+    await app.request('/account/settings', { headers: { authorization: 'access_token t' } });
+    expect(calls.map((c) => c.authorization)).toEqual(['Bearer t', 'access_token t']);
+  });
+
+  it('isolates settings of two instances sharing the same account_id', async () => {
+    stubMePerHost({ [SHARED_HOST]: { accountId: 16 }, [GL_HOST]: { accountId: 16 } });
+    const { app } = await import('../index.js');
+    const shared = { ...AUTH_HEADER };
+    const gl = { ...AUTH_HEADER, authorization: 'Bearer gl-key', 'x-gs-env': 'gl' };
+
+    // Push on gl only.
+    const pushGl = await app.request('/account/settings/957', {
+      method: 'POST',
+      headers: gl,
+      body: JSON.stringify({ settings_blob: { from: 'gl' } })
+    });
+    expect(pushGl.status).toBe(200);
+
+    // Invisible from shared.
+    expect((await app.request('/account/settings/957', { headers: shared })).status).toBe(404);
+    const sharedList = (await (await app.request('/account/settings', { headers: shared })).json()) as {
+      items: unknown[];
+    };
+    expect(sharedList.items).toHaveLength(0);
+
+    // Push on shared, same (main, active) ids.
+    const pushShared = await app.request('/account/settings/957', {
+      method: 'POST',
+      headers: shared,
+      body: JSON.stringify({ settings_blob: { from: 'shared' } })
+    });
+    expect(pushShared.status).toBe(200);
+
+    const getGl = (await (await app.request('/account/settings/957', { headers: gl })).json()) as {
+      settings_blob: { from: string };
+      active_account_name: string;
+    };
+    expect(getGl.settings_blob).toEqual({ from: 'gl' });
+    expect(getGl.active_account_name).toBe(`delegated-${GL_HOST}`);
+    const getShared = (await (await app.request('/account/settings/957', { headers: shared })).json()) as {
+      settings_blob: { from: string };
+    };
+    expect(getShared.settings_blob).toEqual({ from: 'shared' });
+
+    // Histories are separate too.
+    const histGl = (await (await app.request('/account/settings/957/history', { headers: gl })).json()) as {
+      items: unknown[];
+    };
+    expect(histGl.items).toHaveLength(1);
+
+    // Storage keys: shared keeps the historical key, gl is prefixed.
+    expect([...versions.values()].map((v) => v.account_pair).sort()).toEqual(['16#957', 'gl#16#957']);
+  });
+
+  it('rate-limit buckets are partitioned by env (shared keys unchanged)', async () => {
+    stubMePerHost({ [SHARED_HOST]: { accountId: 16 }, [GL_HOST]: { accountId: 16 } });
+    const rl = await import('../lib/rate-limit-dynamo.js');
+    vi.mocked(rl.consumeRateLimit).mockClear();
+    const { app } = await import('../index.js');
+    await app.request('/account/settings', { headers: AUTH_HEADER });
+    await app.request('/account/settings', { headers: { ...AUTH_HEADER, 'x-gs-env': 'gl' } });
+    await app.request('/account/settings/957', {
+      method: 'POST',
+      headers: { ...AUTH_HEADER, 'x-gs-env': 'gl' },
+      body: JSON.stringify({ settings_blob: { a: 1 } })
+    });
+    const keys = vi.mocked(rl.consumeRateLimit).mock.calls.map(([a]) => a.bucketKey);
+    expect(keys).toEqual(['pull#16', 'gl#pull#16', 'gl#push#16#957']);
   });
 });

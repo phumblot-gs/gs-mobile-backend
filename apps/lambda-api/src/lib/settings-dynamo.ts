@@ -15,6 +15,7 @@ import {
   SETTINGS_HISTORY_CAP_PER_PAIR
 } from '@gs-mobile-backend/core';
 import { getConfig } from './config.js';
+import { SHARED_ENV } from './gs-instances.js';
 
 let _doc: DynamoDBDocumentClient | undefined;
 function doc(): DynamoDBDocumentClient {
@@ -34,8 +35,72 @@ export function newVersionId(): string {
   return ulid();
 }
 
-function pairKey(mainAccountId: number, activeAccountId: number): string {
-  return `${mainAccountId}#${activeAccountId}`;
+// ===========================================================================
+// Partitioning by GS instance (`env`)
+// ===========================================================================
+//
+// account ids are only unique within one GS instance, so every key is scoped
+// by env. `shared` keeps the historical keys byte-for-byte (no migration);
+// dedicated instances get an `<env>#` prefix:
+//
+//   | data              | shared                          | dedicated (e.g. gl)                     |
+//   |-------------------|---------------------------------|-----------------------------------------|
+//   | version PK (S)    | "16#957"                        | "gl#16#957"                             |
+//   | pointer           | pointer table, PK main (N)      | env pointer table, PK env_main "gl#16"  |
+//
+// The pointer table's PK is numeric and can't hold a prefix, hence a second
+// pointer table shared by all dedicated instances. No collision is possible:
+// shared keys start with a digit, env ids start with a letter and can't be
+// `shared`.
+
+function isShared(env: string): boolean {
+  return env === SHARED_ENV;
+}
+
+/** Version-table PK for a pair. Exported for tests. */
+export function pairKey(env: string, mainAccountId: number, activeAccountId: number): string {
+  const base = `${mainAccountId}#${activeAccountId}`;
+  return isShared(env) ? base : `${env}#${base}`;
+}
+
+/** PK value of the env pointer table. Exported for tests. */
+export function envMainKey(env: string, mainAccountId: number): string {
+  return `${env}#${mainAccountId}`;
+}
+
+function envPointerTable(): string {
+  const t = getConfig().DYNAMO_ACCOUNT_SETTINGS_ENV_POINTER_TABLE;
+  if (!t) {
+    throw new Error('DYNAMO_ACCOUNT_SETTINGS_ENV_POINTER_TABLE is not configured');
+  }
+  return t;
+}
+
+/** Pointer table + key for a pair. Exported for tests. */
+export function pointerLocation(
+  env: string,
+  mainAccountId: number,
+  activeAccountId: number
+): { table: string; key: Record<string, string | number> } {
+  if (isShared(env)) {
+    return {
+      table: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
+      key: { main_account_id: mainAccountId, active_account_id: activeAccountId }
+    };
+  }
+  return {
+    table: envPointerTable(),
+    key: { env_main: envMainKey(env, mainAccountId), active_account_id: activeAccountId }
+  };
+}
+
+/** Adds the env partition attributes to a pointer item (no-op for shared). */
+function withPointerEnv(
+  env: string,
+  item: AccountSettingsPointerRecord
+): AccountSettingsPointerRecord {
+  if (isShared(env)) return item;
+  return { ...item, env, env_main: envMainKey(env, item.main_account_id) };
 }
 
 // ===========================================================================
@@ -43,27 +108,31 @@ function pairKey(mainAccountId: number, activeAccountId: number): string {
 // ===========================================================================
 
 export async function getPointer(
+  env: string,
   mainAccountId: number,
   activeAccountId: number
 ): Promise<AccountSettingsPointerRecord | null> {
-  const res = await doc().send(
-    new GetCommand({
-      TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
-      Key: { main_account_id: mainAccountId, active_account_id: activeAccountId }
-    })
-  );
+  const loc = pointerLocation(env, mainAccountId, activeAccountId);
+  const res = await doc().send(new GetCommand({ TableName: loc.table, Key: loc.key }));
   return (res.Item as AccountSettingsPointerRecord | undefined) ?? null;
 }
 
 export async function listPointers(
+  env: string,
   mainAccountId: number
 ): Promise<AccountSettingsPointerRecord[]> {
   const res = await doc().send(
-    new QueryCommand({
-      TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
-      KeyConditionExpression: 'main_account_id = :m',
-      ExpressionAttributeValues: { ':m': mainAccountId }
-    })
+    isShared(env)
+      ? new QueryCommand({
+          TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
+          KeyConditionExpression: 'main_account_id = :m',
+          ExpressionAttributeValues: { ':m': mainAccountId }
+        })
+      : new QueryCommand({
+          TableName: envPointerTable(),
+          KeyConditionExpression: 'env_main = :m',
+          ExpressionAttributeValues: { ':m': envMainKey(env, mainAccountId) }
+        })
   );
   return (res.Items ?? []) as AccountSettingsPointerRecord[];
 }
@@ -73,6 +142,7 @@ export async function listPointers(
 // ===========================================================================
 
 export async function getVersion(
+  env: string,
   mainAccountId: number,
   activeAccountId: number,
   versionId: string
@@ -80,13 +150,14 @@ export async function getVersion(
   const res = await doc().send(
     new GetCommand({
       TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE,
-      Key: { account_pair: pairKey(mainAccountId, activeAccountId), version_id: versionId }
+      Key: { account_pair: pairKey(env, mainAccountId, activeAccountId), version_id: versionId }
     })
   );
   return (res.Item as AccountSettingsVersionRecord | undefined) ?? null;
 }
 
 export async function queryAllVersions(
+  env: string,
   mainAccountId: number,
   activeAccountId: number
 ): Promise<AccountSettingsVersionRecord[]> {
@@ -95,7 +166,7 @@ export async function queryAllVersions(
     new QueryCommand({
       TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE,
       KeyConditionExpression: 'account_pair = :p',
-      ExpressionAttributeValues: { ':p': pairKey(mainAccountId, activeAccountId) },
+      ExpressionAttributeValues: { ':p': pairKey(env, mainAccountId, activeAccountId) },
       ScanIndexForward: false
     })
   );
@@ -110,6 +181,7 @@ export async function queryAllVersions(
  * Returns the new pointer.
  */
 export async function pushVersion(args: {
+  env: string;
   mainAccountId: number;
   activeAccountId: number;
   settingsBlob: string;
@@ -119,10 +191,11 @@ export async function pushVersion(args: {
   now: string;
 }): Promise<AccountSettingsPointerRecord> {
   const versionId = newVersionId();
-  const account_pair = pairKey(args.mainAccountId, args.activeAccountId);
+  const account_pair = pairKey(args.env, args.mainAccountId, args.activeAccountId);
 
   const versionItem: AccountSettingsVersionRecord = {
     account_pair,
+    ...(isShared(args.env) ? {} : { env: args.env }),
     version_id: versionId,
     main_account_id: args.mainAccountId,
     active_account_id: args.activeAccountId,
@@ -136,7 +209,7 @@ export async function pushVersion(args: {
     deleted_by_user_name: null
   };
 
-  const pointerItem: AccountSettingsPointerRecord = {
+  const pointerItem: AccountSettingsPointerRecord = withPointerEnv(args.env, {
     main_account_id: args.mainAccountId,
     active_account_id: args.activeAccountId,
     current_version_id: versionId,
@@ -145,7 +218,8 @@ export async function pushVersion(args: {
     updated_by_user_name: args.userName,
     last_action: 'push',
     last_restored_from_version_id: null
-  };
+  });
+  const pointerTable = pointerLocation(args.env, args.mainAccountId, args.activeAccountId).table;
 
   await doc().send(
     new TransactWriteCommand({
@@ -158,7 +232,7 @@ export async function pushVersion(args: {
         },
         {
           Put: {
-            TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
+            TableName: pointerTable,
             Item: pointerItem
           }
         }
@@ -167,17 +241,18 @@ export async function pushVersion(args: {
   );
 
   // Purge old non-deleted versions beyond the cap, except the new current.
-  await purgeOldVersions(args.mainAccountId, args.activeAccountId, versionId);
+  await purgeOldVersions(args.env, args.mainAccountId, args.activeAccountId, versionId);
 
   return pointerItem;
 }
 
 async function purgeOldVersions(
+  env: string,
   mainAccountId: number,
   activeAccountId: number,
   currentVersionId: string
 ): Promise<void> {
-  const all = await queryAllVersions(mainAccountId, activeAccountId);
+  const all = await queryAllVersions(env, mainAccountId, activeAccountId);
   const active = all.filter((v) => v.deleted_at === null);
   if (active.length <= SETTINGS_HISTORY_CAP_PER_PAIR) return;
 
@@ -200,6 +275,7 @@ async function purgeOldVersions(
 
 /** Move the pointer to an existing version (restore). */
 export async function restorePointer(args: {
+  env: string;
   mainAccountId: number;
   activeAccountId: number;
   versionId: string;
@@ -207,7 +283,7 @@ export async function restorePointer(args: {
   userName: string;
   now: string;
 }): Promise<AccountSettingsPointerRecord> {
-  const item: AccountSettingsPointerRecord = {
+  const item: AccountSettingsPointerRecord = withPointerEnv(args.env, {
     main_account_id: args.mainAccountId,
     active_account_id: args.activeAccountId,
     current_version_id: args.versionId,
@@ -216,10 +292,10 @@ export async function restorePointer(args: {
     updated_by_user_name: args.userName,
     last_action: 'restore',
     last_restored_from_version_id: args.versionId
-  };
+  });
   await doc().send(
     new PutCommand({
-      TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
+      TableName: pointerLocation(args.env, args.mainAccountId, args.activeAccountId).table,
       Item: item
     })
   );
@@ -228,6 +304,7 @@ export async function restorePointer(args: {
 
 /** Soft-delete a history version. Caller checks it isn't the current. */
 export async function softDeleteVersion(args: {
+  env: string;
   mainAccountId: number;
   activeAccountId: number;
   versionId: string;
@@ -239,7 +316,7 @@ export async function softDeleteVersion(args: {
     new UpdateCommand({
       TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE,
       Key: {
-        account_pair: pairKey(args.mainAccountId, args.activeAccountId),
+        account_pair: pairKey(args.env, args.mainAccountId, args.activeAccountId),
         version_id: args.versionId
       },
       UpdateExpression:
@@ -258,11 +335,14 @@ export async function softDeleteVersion(args: {
  * Just write the pointer (used by the no-op path on POST to refresh nothing).
  * Provided so handlers don't reach for PutCommand directly.
  */
-export async function putPointer(item: AccountSettingsPointerRecord): Promise<void> {
+export async function putPointer(
+  env: string,
+  item: AccountSettingsPointerRecord
+): Promise<void> {
   await doc().send(
     new PutCommand({
-      TableName: getConfig().DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE,
-      Item: item
+      TableName: pointerLocation(env, item.main_account_id, item.active_account_id).table,
+      Item: withPointerEnv(env, item)
     })
   );
 }

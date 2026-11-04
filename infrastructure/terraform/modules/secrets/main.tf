@@ -13,6 +13,7 @@ locals {
     gs_oauth_base_url      = "${var.project_name}/${var.environment}/gs-oauth-base-url"
     photoroom_api_key      = "${var.project_name}/${var.environment}/photoroom-api-key"
     autoretouch_api_key    = "${var.project_name}/${var.environment}/autoretouch-api-key"
+    gs_instances           = "${var.project_name}/${var.environment}/gs-instances"
   }
 }
 
@@ -85,6 +86,28 @@ resource "aws_secretsmanager_secret" "autoretouch_api_key" {
 resource "aws_secretsmanager_secret_version" "autoretouch_api_key" {
   secret_id     = aws_secretsmanager_secret.autoretouch_api_key.id
   secret_string = "REPLACE_ME"
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+# Registry of dedicated Grand Shooting instances (JSON object keyed by env id):
+#   { "<env_id>": { "api_base_url": "https://api-<x>.grand-shooting.com",
+#                   "web_base_url": "https://<x>.grand-shooting.com",
+#                   "oauth_client_id": "…", "oauth_client_secret": "…" } }
+# OAuth credentials are optional (phase 2). The multi-tenant instance
+# ("shared") is NOT declared here: it keeps using the gs-oauth-* secrets.
+# `{}` = no dedicated instance. See docs/SETTINGS-SYNC.md.
+resource "aws_secretsmanager_secret" "gs_instances" {
+  name                    = local.secret_names.gs_instances
+  description             = "Registry of dedicated Grand Shooting instances (JSON)"
+  recovery_window_in_days = var.recovery_window_in_days
+}
+
+resource "aws_secretsmanager_secret_version" "gs_instances" {
+  secret_id     = aws_secretsmanager_secret.gs_instances.id
+  secret_string = "{}"
 
   lifecycle {
     ignore_changes = [secret_string]

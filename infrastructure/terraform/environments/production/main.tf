@@ -35,12 +35,14 @@ module "lambda" {
   dynamodb_oauth_sessions_name = module.dynamodb.oauth_sessions_table_name
   dynamodb_oauth_sessions_arn  = module.dynamodb.oauth_sessions_table_arn
 
-  dynamodb_account_settings_pointer_name    = module.dynamodb.account_settings_pointer_table_name
-  dynamodb_account_settings_pointer_arn     = module.dynamodb.account_settings_pointer_table_arn
-  dynamodb_account_settings_version_name    = module.dynamodb.account_settings_version_table_name
-  dynamodb_account_settings_version_arn     = module.dynamodb.account_settings_version_table_arn
-  dynamodb_account_settings_rate_limit_name = module.dynamodb.account_settings_rate_limit_table_name
-  dynamodb_account_settings_rate_limit_arn  = module.dynamodb.account_settings_rate_limit_table_arn
+  dynamodb_account_settings_pointer_name     = module.dynamodb.account_settings_pointer_table_name
+  dynamodb_account_settings_pointer_arn      = module.dynamodb.account_settings_pointer_table_arn
+  dynamodb_account_settings_version_name     = module.dynamodb.account_settings_version_table_name
+  dynamodb_account_settings_version_arn      = module.dynamodb.account_settings_version_table_arn
+  dynamodb_account_settings_rate_limit_name  = module.dynamodb.account_settings_rate_limit_table_name
+  dynamodb_account_settings_env_pointer_name = module.dynamodb.account_settings_env_pointer_table_name
+  dynamodb_account_settings_env_pointer_arn  = module.dynamodb.account_settings_env_pointer_table_arn
+  dynamodb_account_settings_rate_limit_arn   = module.dynamodb.account_settings_rate_limit_table_arn
 
   s3_uploads_bucket_name   = module.s3.uploads_bucket_name
   s3_uploads_bucket_arn    = module.s3.uploads_bucket_arn
@@ -53,6 +55,7 @@ module "lambda" {
   secret_gs_oauth_base_url_name      = module.secrets.gs_oauth_base_url_name
   secret_photoroom_api_key_name      = module.secrets.photoroom_api_key_name
   secret_autoretouch_api_key_name    = module.secrets.autoretouch_api_key_name
+  secret_gs_instances_name           = module.secrets.gs_instances_name
 
   public_base_url         = var.public_base_url
   mobile_deep_link_scheme = var.mobile_deep_link_scheme

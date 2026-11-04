@@ -208,7 +208,14 @@ export const HistoryVersionDetailZ = HistoryItemZ.extend({
 export type HistoryVersionDetail = z.infer<typeof HistoryVersionDetailZ>;
 
 // DynamoDB items
+// Partitioning by GS instance: `shared` items keep their historical keys
+// (no migration) and carry no `env`. Dedicated-instance items carry `env` and
+// live in prefixed keys — see apps/lambda-api/src/lib/settings-dynamo.ts.
 export interface AccountSettingsPointerRecord {
+  /** Dedicated instances only: PK of the env pointer table, "<env>#<main>". */
+  env_main?: string;
+  /** Dedicated instances only (absent = `shared`). */
+  env?: string;
   main_account_id: number;
   active_account_id: number;
   current_version_id: string;
@@ -220,8 +227,10 @@ export interface AccountSettingsPointerRecord {
 }
 
 export interface AccountSettingsVersionRecord {
-  account_pair: string; // "<main>#<active>"
+  account_pair: string; // "<main>#<active>" (shared) or "<env>#<main>#<active>"
   version_id: string;   // ULID
+  /** Dedicated instances only (absent = `shared`). */
+  env?: string;
   main_account_id: number;
   active_account_id: number;
   settings_blob: string; // serialised JSON

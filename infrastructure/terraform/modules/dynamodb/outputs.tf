@@ -37,3 +37,11 @@ output "account_settings_rate_limit_table_name" {
 output "account_settings_rate_limit_table_arn" {
   value = aws_dynamodb_table.account_settings_rate_limit.arn
 }
+
+output "account_settings_env_pointer_table_name" {
+  value = aws_dynamodb_table.account_settings_env_pointer.name
+}
+
+output "account_settings_env_pointer_table_arn" {
+  value = aws_dynamodb_table.account_settings_env_pointer.arn
+}

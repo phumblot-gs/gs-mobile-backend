@@ -73,6 +73,16 @@ variable "dynamodb_account_settings_version_name" {
   type        = string
 }
 
+variable "dynamodb_account_settings_env_pointer_arn" {
+  description = "ARN of the account-settings pointer table of dedicated GS instances"
+  type        = string
+}
+
+variable "dynamodb_account_settings_env_pointer_name" {
+  description = "Name of the account-settings pointer table of dedicated GS instances"
+  type        = string
+}
+
 variable "dynamodb_account_settings_rate_limit_arn" {
   description = "ARN of the account-settings rate-limit DynamoDB table"
   type        = string
@@ -120,6 +130,11 @@ variable "secret_gs_oauth_client_secret_name" {
 
 variable "secret_gs_oauth_base_url_name" {
   description = "Secret name for GS OAuth base URL"
+  type        = string
+}
+
+variable "secret_gs_instances_name" {
+  description = "Secret name for the dedicated GS instances registry (JSON)"
   type        = string
 }
 

@@ -29,6 +29,7 @@ SECRETS=(
   "gs-mobile/${ENV}/gs-oauth-base-url"
   "gs-mobile/${ENV}/photoroom-api-key"
   "gs-mobile/${ENV}/autoretouch-api-key"
+  "gs-mobile/${ENV}/gs-instances"
 )
 
 for SECRET in "${SECRETS[@]}"; do
@@ -37,6 +38,13 @@ for SECRET in "${SECRETS[@]}"; do
   read -r -p "  new value (empty = skip): " VALUE
   if [[ -z "${VALUE}" ]]; then
     echo "  skipped"
+    continue
+  fi
+  # The instances registry is a JSON object (`{}` = no dedicated instance).
+  # Refuse invalid JSON here rather than discover it as a 500 at runtime.
+  if [[ "${SECRET}" == */gs-instances ]] && \
+     ! printf '%s' "${VALUE}" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert isinstance(d, dict) and "shared" not in d' 2>/dev/null; then
+    echo "  ✗ not a JSON object (or declares \"shared\") — skipped" >&2
     continue
   fi
   aws secretsmanager put-secret-value \
