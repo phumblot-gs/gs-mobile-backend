@@ -73,6 +73,36 @@ resource "aws_dynamodb_table" "account_settings_pointer" {
   }
 }
 
+# Centralised settings — pointers of DEDICATED Grand Shooting instances
+# (X-GS-Env != "shared"). account ids are only unique within an instance, so
+# these pointers are partitioned by env. The shared-instance pointer table
+# above has a numeric PK that can't carry an env prefix, hence this second
+# table, common to every dedicated instance: PK env_main = "<env>#<main>".
+resource "aws_dynamodb_table" "account_settings_env_pointer" {
+  name         = "${var.project_name}-account-settings-env-pointer-${var.environment}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "env_main"
+  range_key    = "active_account_id"
+
+  attribute {
+    name = "env_main"
+    type = "S"
+  }
+
+  attribute {
+    name = "active_account_id"
+    type = "N"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Name = "${var.project_name}-account-settings-env-pointer-${var.environment}"
+  }
+}
+
 # Centralised settings — historical versions, one row per ULID.
 # account_pair PK = "<main>#<active>" so a single Query returns the whole
 # history of a pair (ULID SK is sortable by creation time).

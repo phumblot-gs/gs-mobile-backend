@@ -33,6 +33,14 @@ export async function fetchMe(
   }
 }
 
+/**
+ * Authorization schemes GS understands. `access_token` is used for OAuth-issued
+ * tokens; `Bearer` for personal API keys (account-management module). GS
+ * rejects a token presented with the wrong scheme, so we relay exactly what
+ * the client sent.
+ */
+export type AuthScheme = 'Bearer' | 'access_token';
+
 export type MeStrictError =
   | { kind: 'unauthorized'; status: number }
   | { kind: 'upstream'; status: number; body?: string }
@@ -45,22 +53,23 @@ export type MeStrictError =
  */
 export async function fetchMeStrict(
   accessToken: string,
-  oauthBaseUrl: string
+  apiBaseUrl: string,
+  scheme: AuthScheme = 'access_token'
 ): Promise<GSMeResponse> {
   // The endpoint historically advertised as `/me` is actually exposed under
   // `/v3/account/me` on the GS API host. The OAuth host serves a 404 for `/me`.
-  const url = new URL('/v3/account/me', oauthBaseUrl).toString();
+  const url = new URL('/v3/account/me', apiBaseUrl).toString();
   let res: Response;
   try {
     res = await fetch(url, {
       method: 'GET',
       headers: {
-        // GS issues OAuth tokens that must be presented with the
-        // `access_token` scheme. `Bearer` is reserved for direct-API
-        // tokens issued through the account-management module — using
-        // `Bearer` here returns 401 "Missing authentication" even with
-        // a valid OAuth token.
-        authorization: `access_token ${accessToken}`,
+        // Relay the client's scheme verbatim. OAuth tokens must be presented
+        // as `access_token` (GS answers 401 "Missing authentication" to an
+        // OAuth token sent as `Bearer`); personal API keys must be presented
+        // as `Bearer`. The default (`access_token`) covers the OAuth flow
+        // callers (`fetchMe`), which only ever hold OAuth tokens.
+        authorization: `${scheme} ${accessToken}`,
         accept: 'application/json'
       }
     });

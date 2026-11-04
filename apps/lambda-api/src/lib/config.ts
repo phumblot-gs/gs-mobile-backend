@@ -15,6 +15,10 @@ const EnvSchema = z.object({
   DYNAMO_ACCOUNT_SETTINGS_POINTER_TABLE: z.string().min(1),
   DYNAMO_ACCOUNT_SETTINGS_VERSION_TABLE: z.string().min(1),
   DYNAMO_ACCOUNT_SETTINGS_RATE_LIMIT_TABLE: z.string().min(1),
+  // Pointer table for dedicated GS instances (PK `env_main` = "<env>#<main>").
+  // Optional so a code deploy that lands before `terraform apply` still boots;
+  // dedicated-instance writes fail until it is set.
+  DYNAMO_ACCOUNT_SETTINGS_ENV_POINTER_TABLE: z.string().min(1).optional(),
   S3_UPLOADS_BUCKET: z.string().min(1),
   S3_PACKSHOTS_BUCKET: z.string().min(1),
 
@@ -31,13 +35,16 @@ const EnvSchema = z.object({
   SECRET_GS_OAUTH_BASE_URL: z.string().min(1),
   SECRET_PHOTOROOM_API_KEY: z.string().min(1),
   SECRET_AUTORETOUCH_API_KEY: z.string().min(1),
+  // Registry of dedicated GS instances (JSON). Optional: absent = `shared` only.
+  SECRET_GS_INSTANCES: z.string().min(1).optional(),
 
   // Optional local-dev overrides (skip Secrets Manager round-trip)
   GS_OAUTH_CLIENT_ID: z.string().optional(),
   GS_OAUTH_CLIENT_SECRET: z.string().optional(),
   GS_OAUTH_BASE_URL: z.string().url().optional(),
   PHOTOROOM_API_KEY: z.string().optional(),
-  AUTORETOUCH_API_KEY: z.string().optional()
+  AUTORETOUCH_API_KEY: z.string().optional(),
+  GS_INSTANCES_JSON: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof EnvSchema>;

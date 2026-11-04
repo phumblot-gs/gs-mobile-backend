@@ -63,6 +63,16 @@ any site. After the GS login the callback redirects the browser to `return_to` w
 endpoints) and `POST /auth/refresh` when the access token expires. The session id is one-shot and lives 60 seconds, as for
 mobile. The tokens are used against the GS API with `Authorization: access_token <token>`.
 
+## Dedicated instances
+
+The OAuth flow above only targets the multi-tenant (`shared`) instance. On a
+dedicated instance (e.g. `gl`) the app authenticates with a personal API key
+(`Authorization: Bearer <key>`) and selects the instance with `X-GS-Env` —
+supported on `/account/settings*` only, see
+[SETTINGS-SYNC.md](./SETTINGS-SYNC.md#multi-instance-x-gs-env). Multi-instance
+OAuth (`/auth/start?env=…`, callback, exchange, refresh) is phase 2; the
+instance registry already holds optional per-instance OAuth credentials for it.
+
 ## Refresh
 
 ```mermaid

@@ -55,6 +55,7 @@ resource "aws_iam_role_policy" "lambda" {
         ]
         Resource = [
           var.dynamodb_account_settings_pointer_arn,
+          var.dynamodb_account_settings_env_pointer_arn,
           var.dynamodb_account_settings_version_arn,
           var.dynamodb_account_settings_rate_limit_arn
         ]
@@ -67,6 +68,7 @@ resource "aws_iam_role_policy" "lambda" {
         ]
         Resource = [
           var.dynamodb_account_settings_pointer_arn,
+          var.dynamodb_account_settings_env_pointer_arn,
           var.dynamodb_account_settings_version_arn
         ]
       },

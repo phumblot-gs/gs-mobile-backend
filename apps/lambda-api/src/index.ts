@@ -34,7 +34,7 @@ export const app = new Hono();
 app.use('*', cors({
   origin: '*',
   allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['content-type', 'authorization'],
+  allowHeaders: ['content-type', 'authorization', 'x-gs-env'],
   maxAge: 86400
 }));
 
